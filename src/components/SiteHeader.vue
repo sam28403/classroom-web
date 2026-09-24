@@ -31,8 +31,10 @@ onMounted(loadUser)
         <el-button @click="router.push('/login')">登录</el-button>
         <el-button type="primary" @click="router.push('/register')">注册</el-button>
       </template>
-      <template v-else-if="route.path === '/' && user">
+      <template v-else-if="user">
         <span class="user-label">{{ user.username }}</span>
+        <el-button v-if="!route.path.startsWith('/dashboard')" type="primary" @click="router.push('/dashboard')">控制面板</el-button>
+        <el-button v-else @click="router.push('/')">返回首页</el-button>
         <el-button :loading="loggingOut" @click="logout">退出登录</el-button>
       </template>
       <el-button v-else @click="router.push('/')">返回首页</el-button>

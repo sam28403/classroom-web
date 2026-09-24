@@ -64,7 +64,7 @@ async function submit() {
     } else {
       setUser(result.user)
       ElMessage.success('登录成功！')
-      await router.replace('/')
+      await router.replace('/dashboard')
     }
   } catch (error) {
     ElMessage.error(error.message)
