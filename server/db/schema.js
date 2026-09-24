@@ -1,0 +1,21 @@
+export function schema(mysql) {
+  const id = mysql ? 'INTEGER PRIMARY KEY AUTO_INCREMENT' : 'INTEGER PRIMARY KEY AUTOINCREMENT'
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS users (id ${id}, username VARCHAR(24) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(16) NOT NULL DEFAULT 'student', status VARCHAR(16) NOT NULL DEFAULT 'active', avatar TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS students (id ${id}, user_id INTEGER NOT NULL UNIQUE, student_no VARCHAR(64) NOT NULL UNIQUE, name VARCHAR(80) NOT NULL, class_name VARCHAR(100) NOT NULL DEFAULT '', FOREIGN KEY(user_id) REFERENCES users(id))`,
+    `CREATE TABLE IF NOT EXISTS teachers (id ${id}, user_id INTEGER NOT NULL UNIQUE, teacher_no VARCHAR(64) NOT NULL UNIQUE, name VARCHAR(80) NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id))`,
+    `CREATE TABLE IF NOT EXISTS courses (id ${id}, course_code VARCHAR(64) NOT NULL UNIQUE, course_name VARCHAR(100) NOT NULL, credit REAL NOT NULL DEFAULT 0 CHECK(credit >= 0), status VARCHAR(16) NOT NULL DEFAULT 'active')`,
+    `CREATE TABLE IF NOT EXISTS teaching_classes (id ${id}, course_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL, term VARCHAR(64) NOT NULL, name VARCHAR(100) NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'active', FOREIGN KEY(course_id) REFERENCES courses(id), FOREIGN KEY(teacher_id) REFERENCES teachers(id))`,
+    `CREATE TABLE IF NOT EXISTS enrollments (id ${id}, teaching_class_id INTEGER NOT NULL, student_id INTEGER NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'active', UNIQUE(teaching_class_id,student_id), FOREIGN KEY(teaching_class_id) REFERENCES teaching_classes(id), FOREIGN KEY(student_id) REFERENCES students(id))`,
+    `CREATE TABLE IF NOT EXISTS face_profiles (id ${id}, student_id INTEGER NOT NULL UNIQUE, subject_key VARCHAR(100) NOT NULL UNIQUE, status VARCHAR(24) NOT NULL, registered_at VARCHAR(30), deleted_at VARCHAR(30), FOREIGN KEY(student_id) REFERENCES students(id))`,
+    `CREATE TABLE IF NOT EXISTS consent_records (id ${id}, student_id INTEGER NOT NULL, policy_version VARCHAR(64) NOT NULL, consent_type VARCHAR(32) NOT NULL, decision VARCHAR(16) NOT NULL, decided_at VARCHAR(30) NOT NULL, FOREIGN KEY(student_id) REFERENCES students(id))`,
+    `CREATE TABLE IF NOT EXISTS attendance_tasks (id ${id}, teaching_class_id INTEGER NOT NULL, start_at VARCHAR(30) NOT NULL, late_at VARCHAR(30) NOT NULL, end_at VARCHAR(30) NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'active', FOREIGN KEY(teaching_class_id) REFERENCES teaching_classes(id), CHECK(start_at <= late_at AND late_at <= end_at))`,
+    `CREATE TABLE IF NOT EXISTS attendance_records (id ${id}, task_id INTEGER NOT NULL, student_id INTEGER NOT NULL, status VARCHAR(16) NOT NULL, similarity REAL, source VARCHAR(16) NOT NULL, checked_at VARCHAR(30) NOT NULL, UNIQUE(task_id,student_id), FOREIGN KEY(task_id) REFERENCES attendance_tasks(id), FOREIGN KEY(student_id) REFERENCES students(id))`,
+    `CREATE TABLE IF NOT EXISTS review_records (id ${id}, attendance_record_id INTEGER NOT NULL, reviewer_id INTEGER NOT NULL, before_status VARCHAR(16) NOT NULL, after_status VARCHAR(16) NOT NULL, reason VARCHAR(500) NOT NULL, created_at VARCHAR(30) NOT NULL, FOREIGN KEY(attendance_record_id) REFERENCES attendance_records(id), FOREIGN KEY(reviewer_id) REFERENCES users(id))`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (id ${id}, actor_id INTEGER, action VARCHAR(64) NOT NULL, resource_type VARCHAR(64) NOT NULL, resource_id VARCHAR(64), result VARCHAR(32) NOT NULL, created_at VARCHAR(30) NOT NULL, FOREIGN KEY(actor_id) REFERENCES users(id))`,
+    `CREATE TABLE IF NOT EXISTS sessions (sid VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires BIGINT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS revoked_sessions (sid VARCHAR(128) PRIMARY KEY, expires BIGINT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS captchas (session_id VARCHAR(128) PRIMARY KEY, text VARCHAR(10) NOT NULL, expires BIGINT NOT NULL)`,
+  ]
+  return statements.map((sql) => mysql ? sql + ' ENGINE=InnoDB' : sql)
+}

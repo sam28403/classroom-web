@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# Project reports (kept locally)
+/Feasibility_analysis.md
+/Monthly_report.md
+
+# Databases, sidecars, backups, and legacy user data
+*.db
+*.db-*
+*.db.*
+*.sqlite
+*.sqlite-*
+*.sqlite.*
+*.sqlite3
+*.sqlite3-*
+*.sqlite3.*
+/data/
+
+# Generated administrator credentials
+admin-credentials*.txt
+test-results/

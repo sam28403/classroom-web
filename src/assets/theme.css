@@ -1,0 +1,25 @@
+/* Shared application colors and responsive header rules copied from CRTicket's theme. */
+html.dark:not(.high-contrast) {
+  --app-page: var(--el-bg-color-page);
+  --app-surface: var(--el-bg-color);
+  --app-text: var(--el-text-color-primary);
+  --app-muted: var(--el-text-color-regular);
+  --app-border: var(--el-border-color);
+  --app-hover: var(--el-fill-color-light);
+  --app-link: var(--el-color-primary);
+  --app-success: var(--el-color-success);
+  --app-warning: var(--el-color-warning);
+  --app-danger: var(--el-color-danger);
+}
+
+html, body { margin: 0; background: var(--app-page, #fff); color: var(--app-text, #000); }
+html.dark { color-scheme: dark; }
+html:not(.dark) { color-scheme: light; }
+html.dark a { color: var(--app-link); }
+.page-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-left: auto; }
+.page-header-actions > .el-button + .el-button { margin-left: 0; }
+
+@media (max-width: 800px) {
+  #app .top-header { height: auto; min-height: 50px; flex-wrap: wrap; padding: 10px 12px; }
+  .top-header .page-header-actions { flex: 1 0 100%; }
+}

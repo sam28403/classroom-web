@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: classroom
+      MYSQL_USER: classroom
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+  api:
+    build: .
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      DB_DRIVER: mysql
+      DB_HOST: mysql
+      DB_USER: classroom
+      DB_NAME: classroom
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      APP_ORIGINS: ${APP_ORIGINS:?Set the HTTPS public origin in .env}
+      TRUST_PROXY: "1"
+      COMPREFACE_URL: ${COMPREFACE_URL:-http://host.docker.internal:8000}
+      COMPREFACE_API_KEY: ${COMPREFACE_API_KEY:-}
+      FACE_THRESHOLD: ${FACE_THRESHOLD:-0.85}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  mysql-data:
