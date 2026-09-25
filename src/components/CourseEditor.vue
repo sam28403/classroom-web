@@ -25,10 +25,10 @@ async function save() {
   if (preview.value.error) return ElMessage.error(preview.value.error)
   busy.value = true
   try {
-    await api(props.session ? `/course-sessions/${props.session.id}` : props.course ? `/scheduled-courses/${props.course.id}` : '/scheduled-courses', {
+    const result = await api(props.session ? `/course-sessions/${props.session.id}` : props.course ? `/scheduled-courses/${props.course.id}` : '/scheduled-courses', {
       method: props.session ? 'PATCH' : props.course ? 'PUT' : 'POST', body: JSON.stringify(props.session ? { ...form.schedule, reason: form.reason } : form),
     })
-    ElMessage.success(props.course ? '课程安排已更新' : '课程已创建')
+    ElMessage.success(result.requiresApproval ? '申请已提交，管理员批准后生效' : props.course ? '课程安排已更新' : '课程已创建')
     emit('saved'); emit('update:modelValue', false)
   } catch (e) { ElMessage.error(e.message) } finally { busy.value = false }
 }

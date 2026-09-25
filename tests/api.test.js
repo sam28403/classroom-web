@@ -57,7 +57,7 @@ function client() {
       return (await db.get('SELECT text FROM captchas WHERE session_id=?', [sid])).text
     },
     async register(username, role) {
-      return this.request('/auth/register', 'POST', { username, role, password: 'Password123', code: await this.captcha() }, 201)
+      return this.request('/auth/register', 'POST', { username, role, name: username, student_no: username, teacher_no: username, password: 'Password123', code: await this.captcha() }, 201)
     },
     async login(username, password = 'Password123', status = 200) {
       return this.request('/auth/login', 'POST', { username, password, code: await this.captcha() }, status)
@@ -72,6 +72,41 @@ function photo(bytes = Buffer.from([255, 216, 255, 224, 0])) {
 const admin = client(), teacher = client(), other = client(), learner = client(), outsider = client()
 let classId, teacherId, studentId, taskId
 const taskBody = () => ({ teaching_class_id: classId, start_at: new Date(Date.now() - 60000).toISOString(), late_at: new Date(Date.now() + 60000).toISOString(), end_at: new Date(Date.now() + 600000).toISOString() })
+
+test('identity registration, immutable numbers, name approval and password reset suspension', async () => {
+  const manager = client(), person = client(), anonymous = client()
+  await manager.login('admin', process.env.ADMIN_PASSWORD)
+  await person.request('/auth/register', 'POST', { username: 'profile_test', role: 'student', password: 'Password123', code: await person.captcha() }, 400)
+  await person.request('/auth/register', 'POST', { username: 'profile_test', role: 'student', student_no: 'S2026001', name: '张三', password: 'Password123', code: await person.captcha() }, 201)
+  await anonymous.request('/auth/register', 'POST', { username: 'duplicate_test', role: 'student', student_no: 'S2026001', name: '张三', password: 'Password123', code: await anonymous.captcha() }, 409)
+  assert.equal(await db.get('SELECT id FROM users WHERE username=?', ['duplicate_test']), undefined)
+  await person.login('profile_test')
+  const profile = (await person.request('/profile')).profile
+  await manager.request(`/students/${profile.id}`, 'PATCH', { student_no: 'different' }, 400)
+  await person.request(`/students/${profile.id}`, 'PATCH', { name: '绕过审核' }, 403)
+  const request = await person.request('/profile/name-request', 'POST', { name: '张小三' }, 202)
+  assert.equal((await person.request('/profile')).profile.name, '张三')
+  await person.request('/profile/name-request', 'POST', { name: '重复申请' }, 409)
+  await manager.request(`/requests/${request.requestId}`, 'PATCH', { status: 'approved', note: '核对证明通过' })
+  assert.equal((await person.request('/profile')).profile.name, '张小三')
+  const rejected = await person.request('/profile/name-request', 'POST', { name: '不通过' }, 202)
+  await manager.request(`/requests/${rejected.requestId}`, 'PATCH', { status: 'rejected', note: '资料不符' })
+  assert.equal((await person.request('/profile')).profile.name, '张小三')
+  await anonymous.request('/auth/reset-request', 'POST', { username: 'profile_test', role: 'student', number: 'wrong', name: '张小三', code: await anonymous.captcha() }, 400)
+  await anonymous.request('/auth/reset-request', 'POST', { username: 'admin', role: 'admin', number: 'admin', name: 'admin', code: await anonymous.captcha() }, 400)
+  const oldCookie = person.cookie
+  await anonymous.request('/auth/reset-request', 'POST', { username: 'profile_test', role: 'student', number: 'S2026001', name: '张小三', code: await anonymous.captcha() }, 202)
+  await person.request('/auth/me', 'GET', undefined, 401)
+  await person.login('profile_test', 'Password123', 403)
+  await manager.request(`/users/${profile.user_id}`, 'PATCH', { status: 'active' }, 409)
+  await manager.request(`/users/${profile.user_id}/reset-password`, 'POST', { password: 'short' }, 400)
+  await manager.request(`/users/${profile.user_id}/reset-password`, 'POST', { password: 'New-password123' })
+  person.cookie = oldCookie
+  await person.request('/auth/me', 'GET', undefined, 401)
+  await person.login('profile_test', 'Password123', 401)
+  await person.login('profile_test', 'New-password123')
+  assert.equal((await person.request('/requests')).items.find(r => r.kind === 'password_reset').status, 'approved')
+})
 
 test('registration, teacher approval, captcha consumption, and live role checks', async () => {
   await admin.login('admin', process.env.ADMIN_PASSWORD)

@@ -2,11 +2,29 @@ import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import db from './db/db.js'
 import { authenticate, roles, ownedClass, id, string, fail, audit, now } from './http.js'
+import { submitRequest, notifyClass } from './requests.js'
 import { generateSessions } from '../shared/schedule.js'
 
 export const scheduling = Router()
 scheduling.use(authenticate)
-const teacher = roles('teacher')
+const teacher = roles('teacher', 'admin')
+export const scheduleActions = {}
+function action(kind, handler) { scheduleActions[kind] = handler; return handler }
+scheduling.post('/scheduled-courses/:id/cancel', teacher, action('course_cancel', async (req, res) => {
+  const reason = string(req.body.reason, '取消原因', 500)
+  const result = await db.transaction(async () => {
+    const c = await ownedClass(req, req.params.id)
+    await db.get('SELECT id FROM teachers WHERE id=?' + db.lock, [c.teacher_id])
+    if (c.status !== 'active') fail(409, '课程已经取消 / 归档')
+    if (req.user.role === 'teacher' && !req.approved) return submitRequest(req, 'course_cancel', c.id, { reason })
+    await db.run("UPDATE teaching_classes SET status='archived' WHERE id=?", [c.id])
+    await db.run("UPDATE attendance_tasks SET status='ended' WHERE teaching_class_id=? AND status<>'ended'", [c.id])
+    await notifyClass(c.id, `课程已取消。原因：${reason}`)
+    await audit(req, 'schedule.cancel', 'teaching_classes', c.id)
+    return { success: true }
+  })
+  res.status(result.requiresApproval ? 202 : 200).json(result)
+}))
 function validated(body) {
   const name = string(body.course_name, '中文课程名称')
   const english = string(body.english_name, '英文课程名称')
@@ -48,8 +66,9 @@ scheduling.post('/scheduled-courses/:id/students', teacher, async (req, res) => 
   })
   res.status(201).json({ success: true })
 })
-scheduling.post('/scheduled-courses', teacher, async (req, res) => {
+scheduling.post('/scheduled-courses', roles('teacher'), action('course_create', async (req, res) => {
   const data = validated(req.body)
+  if (req.user.role === 'teacher' && !req.approved) return res.status(202).json(await submitRequest(req, 'course_create', 0, req.body))
   const result = await db.transaction(async () => {
     const t = await db.get('SELECT id FROM teachers WHERE user_id=?' + db.lock, [req.user.id])
     if (!t) fail(403, '教师资料不存在')
@@ -61,13 +80,14 @@ scheduling.post('/scheduled-courses', teacher, async (req, res) => {
     return c.insertId
   })
   res.status(201).json({ id: result })
-})
-scheduling.put('/scheduled-courses/:id', teacher, async (req, res) => {
+}))
+scheduling.put('/scheduled-courses/:id', teacher, action('course_update', async (req, res) => {
   const data = validated(req.body)
   const reason = string(req.body.reason, '调课原因', 500)
-  await db.transaction(async () => {
+  const result = await db.transaction(async () => {
     const c = await ownedClass(req, req.params.id)
     if (c.status !== 'active') fail(409, '教学班已归档')
+    if (req.user.role === 'teacher' && !req.approved) return submitRequest(req, 'course_update', c.id, req.body)
     await db.get('SELECT id FROM teachers WHERE id=?' + db.lock, [c.teacher_id])
     await db.run('DELETE FROM course_sessions WHERE teaching_class_id=? AND start_at>?', [c.id, now()])
     await saveSessions(c.id, data.sessions.map((s) => ({ ...s, reason })), c.teacher_id)
@@ -80,22 +100,25 @@ scheduling.put('/scheduled-courses/:id', teacher, async (req, res) => {
     await db.run('UPDATE teaching_classes SET name=?,term=? WHERE id=?', [data.className, data.term, c.id])
     await db.run('DELETE FROM course_plans WHERE teaching_class_id=?', [c.id])
     await db.run('INSERT INTO course_plans(teaching_class_id,english_name,schedule) VALUES (?,?,?)', [c.id, data.english, JSON.stringify(req.body.schedule)])
+    await notifyClass(c.id, `后续课程安排已变更。原因：${reason}`)
     await audit(req, 'schedule.replace', 'teaching_classes', c.id)
   })
-  res.json({ success: true })
-})
-scheduling.patch('/course-sessions/:id', teacher, async (req, res) => {
+  res.status(result?.requiresApproval ? 202 : 200).json(result || { success: true })
+}))
+scheduling.patch('/course-sessions/:id', teacher, action('session_update', async (req, res) => {
   let sessions
   try { sessions = generateSessions({ ...req.body, repeat: 'once' }) } catch (error) { fail(400, error.message) }
   const reason = string(req.body.reason, '调课原因', 500)
-  await db.transaction(async () => {
+  const result = await db.transaction(async () => {
     const s = await db.get('SELECT * FROM course_sessions WHERE id=?', [id(req.params.id)])
     if (!s) fail(404, '课次不存在')
     const c = await ownedClass(req, s.teaching_class_id)
     await db.get('SELECT id FROM teachers WHERE id=?' + db.lock, [c.teacher_id])
     if (c.status !== 'active' || s.start_at <= now() || sessions[0].start_at <= now()) fail(409, '只能调整尚未开始的有效课程')
+    if (req.user.role === 'teacher' && !req.approved) return submitRequest(req, 'session_update', s.id, req.body)
     await saveSessions(c.id, sessions.map((v) => ({ ...v, reason })), c.teacher_id, s.id)
+    await notifyClass(c.id, `课次已调整至 ${new Date(Date.parse(sessions[0].start_at) + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ')}（北京时间），地点：${sessions[0].location}。原因：${reason}`)
     await audit(req, 'schedule.reschedule', 'course_sessions', s.id)
   })
-  res.json({ success: true })
-})
+  res.status(result?.requiresApproval ? 202 : 200).json(result || { success: true })
+}))

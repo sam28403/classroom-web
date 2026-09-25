@@ -11,7 +11,7 @@ Web 使用 `credentials: 'include'`；Android 使用持久 CookieJar。认证采
 | 方法 | 路径 | 请求或用途 |
 |---|---|---|
 | GET | `/captcha` | 返回 `{image}`（SVG data URL），验证码 5 分钟有效，一次性使用，与 Cookie 绑定 |
-| POST | `/auth/register` | `{username,password,role,code}`；role 为 student/teacher；教师为 pending，返回 requiresApproval |
+| POST | `/auth/register` | `{username,password,role,code,name,student_no?/teacher_no?}`；role 为 student/teacher；教师为 pending，返回 requiresApproval |
 | POST | `/auth/login` | `{username,password,code}`，返回 `{success,user}` |
 | GET | `/auth/me` | 当前用户的 id、username、role、avatar |
 | POST | `/auth/logout` | 空请求体或 `{}` 均支持，销毁会话并清 Cookie；重复调用可成功 |
@@ -22,13 +22,39 @@ Web 使用 `credentials: 'include'`；Android 使用持久 CookieJar。认证采
 
 旧的 `/user/login`、`/user/register`、`/user/me`、`/user/logout` 保留兼容。注册账号 3–24 位文字、数字、下划线或短横线；密码至少 8 位，最多 72 UTF-8 字节，含数字和非数字。初始管理员密码至少 12 位。
 
+## 审批、排课、资料与通知
+
+教师课程变更返回 `202 {requestId,requiresApproval:true}`，批准前不修改有效课表；管理员直接修改返回 200。审批生效和通知写入在同一事务内，失败回滚。
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/profile` | 查询本人资料（管理员返回 null） |
+| POST | `/profile/name-request` | 学生 / 教师提交 `{name}`，返回 202 |
+| GET | `/requests` | 管理员看全部申请，其他人仅看本人；payload 为解析后的对象 |
+| PATCH | `/requests/{id}` | 管理员提交 `{status: approved/rejected,note}`；重置密码申请必须走专用接口 |
+| POST | `/auth/reset-request` | 无需登录，提交 `{username,role,number,name,code}`；role 仅 student/teacher；验证码及资料匹配后停用并撤销会话，返回 202 |
+| POST | `/users/{id}/reset-password` | 管理员提交 `{password}`，重设学生 / 教师密码、解禁并完成待处理重置申请 |
+| GET | `/schedule` | 按角色和选课关系查询课程与课次 |
+| POST | `/scheduled-courses` | 教师提交 `{course_name,english_name,name,term,schedule}` |
+| PUT | `/scheduled-courses/{id}` | 教师申请 / 管理员直接替换后续安排，上述字段加必填 reason |
+| PATCH | `/course-sessions/{id}` | 教师申请 / 管理员直接调单次课，提交 `{date,start,end,location,reason}`（北京时间） |
+| POST | `/scheduled-courses/{id}/cancel` | 教师申请 / 管理员直接取消整个教学班，提交 `{reason}` |
+| GET | `/student-candidates?q=...` | 教师 / 管理员按学号或姓名查询最多 20 个有效学生，返回 id、student_no、name |
+| POST | `/scheduled-courses/{id}/students` | 教师 / 管理员按 `{student_no}` 添加学生；教师仅限本人课程 |
+| GET | `/notifications` | 学生查询本人所有未关闭课程通知 |
+| PATCH | `/notifications/{id}/close` | 学生手动关闭本人通知，无需 body |
+
+schedule 字段为 `{date,start,end,location,repeat,interval?,weekdays?,until?}`；repeat 为 once / daily / weekly，日期为 YYYY-MM-DD、时间为 HH:mm，weekdays 使用 0–6（周日–周六），统一北京时间。
+
+申请状态为 pending / approved / rejected；审核须填写说明，已处理申请不能重复审核。批准课程申请时重新检查权限、有效状态、未来时间及冲突。存在待处理密码重置申请时，`PATCH /users/{id}` 不允许仅设置 active 绕过重置。
+
 ## 基础资料
 
 | 方法 | 路径 | 权限与请求 |
 |---|---|---|
-| GET | `/students`、`/teachers` | 管理员查询；资料随注册自动创建，初始学工号和姓名为用户名 |
-| PATCH | `/students/{id}` | 管理员：`{student_no?,name?,class_name?}` |
-| PATCH | `/teachers/{id}` | 管理员：`{teacher_no?,name?}` |
+| GET | `/students`、`/teachers` | 管理员查询；资料随注册自动创建，注册时必填学号 / 工号和姓名；旧资料保留 |
+| PATCH | `/students/{id}` | 管理员：`{name?,class_name?}；学号不可修改` |
+| PATCH | `/teachers/{id}` | 管理员：`{name?}；工号不可修改` |
 | GET | `/courses` | 管理员、教师 |
 | POST | `/courses` | 管理员：`{course_code,course_name,credit?}` |
 | PATCH | `/courses/{id}` | 管理员：`{course_code?,course_name?,credit?,status?}`，status 为 active/archived |

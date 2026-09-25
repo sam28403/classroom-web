@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import db from './db/db.js'
+import { notifyClass } from './requests.js'
 import { authenticate, roles, student, ownedClass, id, string, choice, fail, audit, now } from './http.js'
 
 export const business = Router()
@@ -19,6 +20,10 @@ const date = (value) => {
 async function mutation(req, action, type, fn) {
   return db.transaction(async () => {
     const result = await fn()
+    if (['update', 'archive'].includes(action) && ['courses', 'teaching_classes'].includes(type)) {
+      const classes = type === 'courses' ? await db.all('SELECT id FROM teaching_classes WHERE course_id=?', [id(req.params.id)]) : [{ id: id(req.params.id) }]
+      for (const c of classes) await notifyClass(c.id, action === 'archive' ? '课程已取消 / 归档' : '管理员已修改课程信息，请查看最新课程安排')
+    }
     await audit(req, action, type, result?.insertId || req.params.id)
     return result
   })
@@ -47,9 +52,10 @@ for (const table of ['students', 'teachers']) {
   business.patch(`/${table}/:id`, admin, async (req, res) => {
     const row = await db.get(`SELECT * FROM ${table} WHERE id=?`, [id(req.params.id)])
     if (!row) fail(404, '人员资料不存在')
+    if (req.body[numberField] !== undefined && req.body[numberField] !== row[numberField]) fail(400, '学号 / 工号注册后不可修改')
     await mutation(req, 'update', table, async () => {
       await db.run(`UPDATE ${table} SET ${numberField}=?,name=? WHERE id=?`, [string(req.body[numberField] ?? row[numberField], '学工号', 64), string(req.body.name ?? row.name, '姓名', 80), row.id])
-      if (table === 'students' && req.body.class_name !== undefined) await db.run('UPDATE students SET class_name=? WHERE id=?', [string(req.body.class_name, '班级'), row.id])
+      if (table === 'students' && req.body.class_name !== undefined) await db.run('UPDATE students SET class_name=? WHERE id=?', [req.body.class_name === '' ? '' : string(req.body.class_name, '班级'), row.id])
     })
     res.json({ success: true })
   })

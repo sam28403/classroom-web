@@ -43,6 +43,6 @@ export async function student(req) {
 export async function ownedClass(req, classId) {
   const row = await db.get('SELECT c.*,t.user_id AS teacher_user_id FROM teaching_classes c JOIN teachers t ON t.id=c.teacher_id WHERE c.id=?', [id(classId)])
   if (!row) fail(404, '教学班不存在')
-  if (row.teacher_user_id !== req.user.id) fail(403, '只能操作本人教学班')
+  if (req.user.role !== 'admin' && row.teacher_user_id !== req.user.id) fail(403, '只能操作本人教学班')
   return row
 }

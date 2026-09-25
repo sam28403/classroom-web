@@ -2,6 +2,9 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import RequestPanel from '@/components/RequestPanel.vue'
+import UserManagement from '@/components/UserManagement.vue'
+import CourseNotifications from '@/components/CourseNotifications.vue'
 import SiteHeader from '@/components/SiteHeader.vue'
 import CourseEditor from '@/components/CourseEditor.vue'
 import CourseCard from '@/components/CourseCard.vue'
@@ -20,13 +23,16 @@ const launch = ref(false), launchClass = ref(null), duration = ref(15), lateMinu
 const clock = ref(Date.now()), timer = setInterval(() => { clock.value = Date.now() }, 30000)
 onUnmounted(() => { clearInterval(timer); version++ })
 const role = computed(() => user.value?.role)
-const menus = computed(() => [{ id: '', label: '控制面板', symbol: '▦' }, ...(role.value === 'admin' ? [{ id: 'users', label: '用户管理', symbol: '♙' }] : []), { id: 'courses', label: role.value === 'admin' ? '课程管理' : '课程列表', symbol: '▤' }, ...(role.value !== 'admin' ? [{ id: 'attendance', label: '考勤记录', symbol: '◷' }] : []), { id: 'settings', label: '设置', symbol: '⚙' }])
+const menus = computed(() => [{ id: '', label: '控制面板', symbol: '▦' }, ...(role.value === 'admin' ? [{ id: 'users', label: '用户管理', symbol: '♙' }] : []), { id: 'courses', label: role.value === 'admin' ? '课程管理' : '课程列表', symbol: '▤' }, ...(role.value !== 'admin' ? [{ id: 'attendance', label: '考勤记录', symbol: '◷' }] : []), { id: 'requests', label: role.value === 'admin' ? '申请审核' : '我的申请', symbol: '✓' }, { id: 'settings', label: '设置', symbol: '⚙' }])
 const section = computed(() => String(route.params.section || ''))
 const pageTitle = computed(() => menus.value.find((m) => m.id === section.value)?.label)
 const navigate = (id = '') => router.push('/dashboard' + (id ? `/${id}` : ''))
 const activeClasses = computed(() => classes.value.filter((c) => c.status === 'active'))
 const today = computed(() => sessions.value.filter((s) => activeClasses.value.some((c) => c.id === s.teaching_class_id) && dateKey(s.start_at) === dateKey(clock.value)))
 const ongoing = computed(() => today.value.filter((s) => Date.parse(s.start_at) <= clock.value && Date.parse(s.end_at) > clock.value))
+const requests = ref([])
+const pendingRequests = computed(() => requests.value.filter((r) => r.status === 'pending'))
+const pendingCount = computed(() => pending.value.length + pendingRequests.value.length)
 const pending = computed(() => users.value.filter((u) => u.status === 'pending'))
 const courseFor = (id) => classes.value.find((c) => c.id === id)
 const nextSession = (id) => sessions.value.find((s) => s.teaching_class_id === id && Date.parse(s.end_at) > clock.value)
@@ -34,24 +40,24 @@ const shownClasses = computed(() => activeClasses.value.filter((c) => `${c.cours
 const shownUsers = computed(() => users.value.filter((u) => u.username.toLowerCase().includes(search.value.toLowerCase())))
 const detailSessions = computed(() => sessions.value.filter((s) => s.teaching_class_id === details.value?.id))
 const liveTasks = computed(() => tasks.value.filter((t) => t.status === 'active' && Date.parse(t.end_at) > clock.value))
-const stats = computed(() => role.value === 'admin' ? [['注册用户', users.value.length], ['待审核教师', pending.value.length], ['有效教学班', activeClasses.value.length], ['今日课次', today.value.length]] : role.value === 'teacher' ? [['我的教学班', activeClasses.value.length], ['今日课次', today.value.length], ['未结束考勤', liveTasks.value.length], ['后续课次', sessions.value.filter((s) => Date.parse(s.start_at) > clock.value).length]] : [['我的课程', activeClasses.value.length], ['今日课次', today.value.length], ['可签到任务', tasks.value.length], ['考勤记录', records.value.length]])
+const stats = computed(() => role.value === 'admin' ? [['注册用户', users.value.length], ['待处理审批', pendingCount.value], ['有效教学班', activeClasses.value.length], ['今日课次', today.value.length]] : role.value === 'teacher' ? [['我的教学班', activeClasses.value.length], ['今日课次', today.value.length], ['未结束考勤', liveTasks.value.length], ['后续课次', sessions.value.filter((s) => Date.parse(s.start_at) > clock.value).length]] : [['我的课程', activeClasses.value.length], ['今日课次', today.value.length], ['可签到任务', tasks.value.length], ['考勤记录', records.value.length]])
 let version = 0
 async function refresh() {
   const request = ++version
   if (!user.value) return
   loading.value = true; error.value = ''
   try {
-    const result = await Promise.all([api('/schedule'), ...(role.value === 'admin' ? [api('/users'), api('/audit-logs?limit=8')] : role.value === 'teacher' ? [api('/attendance-tasks')] : [api('/attendance/me'), api('/attendance-tasks/available')])])
+    const result = await Promise.all([api('/schedule'), ...(role.value === 'admin' ? [api('/users'), api('/audit-logs?limit=8'), api('/requests')] : role.value === 'teacher' ? [api('/attendance-tasks')] : [api('/attendance/me'), api('/attendance-tasks/available')])])
     if (request !== version) return
     classes.value = result[0].classes; sessions.value = result[0].sessions
     if (details.value) details.value = courseFor(details.value.id) || null
-    if (role.value === 'admin') { users.value = result[1].items; logs.value = result[2].items }
+    if (role.value === 'admin') { users.value = result[1].items; logs.value = result[2].items; requests.value = result[3].items }
     else if (role.value === 'teacher') tasks.value = result[1].items
     else { records.value = result[1].items; tasks.value = result[2].items }
   } catch (e) { if (request === version) { error.value = e.message; if (e.status === 401) router.replace('/login') } } finally { if (request === version) loading.value = false }
 }
 watch(() => user.value?.id, () => {
-  version++; classes.value = []; sessions.value = []; users.value = []; logs.value = []; records.value = []; tasks.value = []
+  version++; requests.value = []; classes.value = []; sessions.value = []; users.value = []; logs.value = []; records.value = []; tasks.value = []
   editor.value = false; details.value = null; enrollment.value = false; launch.value = false
   if (!user.value) router.replace('/login'); else refresh()
 }, { immediate: true })
@@ -65,6 +71,14 @@ async function approve(u, status) {
   try { await ElMessageBox.confirm(`${status === 'active' ? '批准 / 启用' : '拒绝 / 停用'}账号「${u.username}」？`, '确认账户操作', { type: 'warning' }) } catch { return }
   await execute(() => api(`/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ status }) }), '账户状态已更新')
 }
+async function candidates(query, callback) {
+  try { callback((await api('/student-candidates?q=' + encodeURIComponent(query))).items.map(s => ({ value: s.student_no, label: s.student_no + ' · ' + s.name }))) } catch (e) { callback([]); ElMessage.error(e.message) }
+}
+async function cancelCourse(c) {
+  let reason
+  try { reason = (await ElMessageBox.prompt('请输入取消课程原因，管理员批准后生效', '申请取消课程', { inputValidator: v => !!v?.trim() || '请填写原因' })).value } catch { return }
+  if (await execute(() => api(`/scheduled-courses/${c.id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }), '取消课程申请已提交')) details.value = null
+}
 function edit(c = null, s = null) { selectedCourse.value = c; selectedSession.value = s; editor.value = true }
 async function archive(c) {
   try { await ElMessageBox.confirm('归档后，该教学班将不再显示为有效课程。', '归档教学班', { type: 'warning' }) } catch { return }
@@ -72,7 +86,7 @@ async function archive(c) {
 }
 function addStudent(c = null) { targetClass.value = c?.id || activeClasses.value[0]?.id || null; studentNo.value = ''; enrollment.value = true }
 async function enroll() {
-  if (!targetClass.value || !studentNo.value.trim()) return ElMessage.warning('请选择课程并填写学号')
+  if (!targetClass.value || !studentNo.value.trim()) return ElMessage.warning('请选择课程并选择学生学号')
   if (await execute(() => api(`/scheduled-courses/${targetClass.value}/students`, { method: 'POST', body: JSON.stringify({ student_no: studentNo.value }) }), '学生已加入教学班')) enrollment.value = false
 }
 function launchTask() { launchClass.value = activeClasses.value[0]?.id || null; launch.value = true }
@@ -97,9 +111,11 @@ async function createTask() {
         <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" class="section-gap"><template #default><el-button link type="primary" @click="refresh">重新加载</el-button></template></el-alert>
         <template v-if="!section">
           <template v-if="role === 'admin'">
-            <el-card shadow="never" class="important-card"><template #header><div class="section-heading"><h2>重要信息</h2><el-tag :type="pending.length ? 'warning' : 'success'">{{ pending.length ? `${pending.length} 项待处理` : '暂无待办' }}</el-tag></div></template>
+            <el-card shadow="never" class="important-card"><template #header><div class="section-heading"><h2>重要信息</h2><el-tag :type="pendingCount ? 'warning' : 'success'">{{ pendingCount ? `${pendingCount} 项待处理` : '暂无待办' }}</el-tag></div></template>
               <el-alert title="教师注册审批" :description="pending.length ? '请核实教师身份后批准账号，获批教师可创建课程并管理自己的教学班。' : '当前没有待审核的教师账号。新的注册申请会显示在这里。'" :type="pending.length ? 'warning' : 'success'" show-icon :closable="false" />
               <el-table v-if="pending.length" :data="pending"><el-table-column prop="username" label="教师账号" /><el-table-column prop="created_at" label="申请时间" /><el-table-column label="操作" width="160"><template #default="{ row }"><el-button link type="primary" :disabled="saving" @click="approve(row, 'active')">批准</el-button><el-button link type="danger" :disabled="saving" @click="approve(row, 'disabled')">拒绝</el-button></template></el-table-column></el-table>
+              <RequestPanel admin :requests="pendingRequests" title="课程、姓名与密码重置审批" @changed="refresh" />
+              <el-button link type="primary" @click="navigate('requests')">查看全部申请与审核历史 →</el-button>
             </el-card>
           </template>
           <template v-else>
@@ -116,17 +132,20 @@ async function createTask() {
         <el-card v-if="section === 'users' && role === 'admin'" shadow="never"><template #header><div class="section-heading"><h2>账户列表</h2><el-input v-model="search" class="search-input" placeholder="搜索账号" clearable /></div></template><el-table :data="shownUsers" empty-text="暂无用户"><el-table-column prop="username" label="账号" /><el-table-column label="角色"><template #default="{ row }">{{ roleNames[row.role] }}</template></el-table-column><el-table-column label="状态"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'warning'">{{ statusNames[row.status] }}</el-tag></template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button v-if="row.role !== 'admin'" link :type="row.status === 'active' ? 'danger' : 'primary'" :disabled="saving" @click="approve(row, row.status === 'active' ? 'disabled' : 'active')">{{ row.status === 'active' ? '停用' : '批准 / 启用' }}</el-button></template></el-table-column></el-table></el-card>
         <template v-if="section === 'courses'"><div class="section-heading"><h2>{{ role === 'student' ? '我的课程' : '教学班与课程安排' }}</h2><el-input v-model="search" class="search-input" placeholder="搜索课程或教学班" clearable /></div><div class="course-grid section-gap"><CourseCard v-for="c in shownClasses" :key="c.id" :course="c" :session="nextSession(c.id)" :now="clock" @details="details = $event" /></div><el-empty v-if="!shownClasses.length" :description="search ? '没有匹配的课程' : '暂无课程，添加课程或联系教师加入教学班'" /></template>
         <AttendancePanel v-if="section === 'attendance' && role !== 'admin'" :role="role" :classes="classes" :tasks="tasks" :records="records" @refresh="refresh" />
+        <RequestPanel v-if="section === 'requests'" :admin="role === 'admin'" @changed="refresh" />
+        <UserManagement v-if="section === 'users' && role === 'admin'" @changed="refresh" />
+        <CourseNotifications v-if="role === 'student'" :key="user.id" @changed="refresh" />
         <AccountSettings v-if="section === 'settings'" />
       </main>
     </div>
     <CourseEditor v-model="editor" :course="selectedCourse" :session="selectedSession" @saved="refresh" />
     <el-drawer :model-value="!!details" :title="`${details?.course_name || ''} · 课程安排`" size="min(820px, 100%)" @close="details = null">
       <p class="muted">{{ details?.english_name }} · {{ details?.teacher_name }} · 北京时间</p>
-      <div v-if="role === 'teacher'" class="quick-actions section-gap"><el-button type="primary" @click="edit(details)">修改后续课程安排</el-button><el-button @click="addStudent(details)">添加学生</el-button></div>
+      <div v-if="role !== 'student'" class="quick-actions section-gap"><el-button type="primary" @click="edit(details)">修改后续课程安排</el-button><el-button @click="addStudent(details)">添加学生</el-button><el-button v-if="role === 'teacher'" type="danger" plain :disabled="saving" @click="cancelCourse(details)">申请取消课程</el-button></div>
       <el-button v-if="role === 'admin'" type="danger" plain :disabled="saving" @click="archive(details)">归档教学班</el-button>
-      <el-table :data="detailSessions" empty-text="暂未设置课次" class="section-gap"><el-table-column label="日期" width="115"><template #default="{ row }">{{ dateKey(row.start_at) }}</template></el-table-column><el-table-column label="时间" width="125"><template #default="{ row }">{{ formatTime(row.start_at) }}–{{ formatTime(row.end_at) }}</template></el-table-column><el-table-column prop="location" label="地点" min-width="100" /><el-table-column label="调课说明" min-width="170"><template #default="{ row }"><span v-if="row.change_reason">{{ row.change_reason }}<br>原安排：{{ dateKey(row.original_start) }} {{ formatTime(row.original_start) }}</span><span v-else>—</span></template></el-table-column><el-table-column v-if="role === 'teacher'" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="Date.parse(row.start_at) <= clock" @click="edit(details, row)">调课</el-button></template></el-table-column></el-table>
+      <el-table :data="detailSessions" empty-text="暂未设置课次" class="section-gap"><el-table-column label="日期" width="115"><template #default="{ row }">{{ dateKey(row.start_at) }}</template></el-table-column><el-table-column label="时间" width="125"><template #default="{ row }">{{ formatTime(row.start_at) }}–{{ formatTime(row.end_at) }}</template></el-table-column><el-table-column prop="location" label="地点" min-width="100" /><el-table-column label="调课说明" min-width="170"><template #default="{ row }"><span v-if="row.change_reason">{{ row.change_reason }}<br>原安排：{{ dateKey(row.original_start) }} {{ formatTime(row.original_start) }}</span><span v-else>—</span></template></el-table-column><el-table-column v-if="role !== 'student'" label="操作" width="80" fixed="right"><template #default="{ row }"><el-button link type="primary" :disabled="Date.parse(row.start_at) <= clock" @click="edit(details, row)">调课</el-button></template></el-table-column></el-table>
     </el-drawer>
-    <el-dialog v-model="enrollment" title="添加学生" width="min(480px, 94vw)" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="课程 / 教学班"><el-select v-model="targetClass" placeholder="请选择课程"><el-option v-for="c in activeClasses" :key="c.id" :value="c.id" :label="`${c.course_name} · ${c.name}`" /></el-select></el-form-item><el-form-item label="学生学号"><el-input v-model="studentNo" placeholder="输入已注册学生的学号" maxlength="64" /></el-form-item><p class="muted">学生注册后，初始学号与注册账号相同；若管理员修改过，请填写最新学号。</p></el-form><template #footer><el-button :disabled="saving" @click="enrollment = false">取消</el-button><el-button type="primary" :loading="saving" @click="enroll">加入教学班</el-button></template></el-dialog>
+    <el-dialog v-model="enrollment" title="添加学生" width="min(480px, 94vw)" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="课程 / 教学班"><el-select v-model="targetClass" placeholder="请选择课程"><el-option v-for="c in activeClasses" :key="c.id" :value="c.id" :label="`${c.course_name} · ${c.name}`" /></el-select></el-form-item><el-form-item label="学生学号"><el-autocomplete v-model="studentNo" :fetch-suggestions="candidates" :trigger-on-focus="false" placeholder="输入学号或姓名，选择候选学生" maxlength="64"><template #default="{ item }">{{ item.label }}</template></el-autocomplete></el-form-item><p class="muted">按学号或姓名搜索，候选项同时显示学号和姓名；同名学生请核对学号。</p></el-form><template #footer><el-button :disabled="saving" @click="enrollment = false">取消</el-button><el-button type="primary" :loading="saving" @click="enroll">加入教学班</el-button></template></el-dialog>
     <el-dialog v-model="launch" title="发起考勤" width="min(480px, 94vw)" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="课程 / 教学班"><el-select v-model="launchClass" placeholder="请选择课程"><el-option v-for="c in activeClasses" :key="c.id" :value="c.id" :label="`${c.course_name} · ${c.name}`" /></el-select></el-form-item><el-form-item label="签到时长（分钟）"><el-input-number v-model="duration" :min="1" :max="180" :precision="0" /></el-form-item><el-form-item label="开始后多少分钟记为迟到"><el-input-number v-model="lateMinutes" :min="0" :max="duration || 180" :precision="0" /></el-form-item><el-alert title="确认后立即开始考勤" description="学生可通过 Android 端签到；教师可人工登记。签到截止后请在考勤记录中结束任务并复核结果。" type="info" :closable="false" /></el-form><template #footer><el-button :disabled="saving" @click="launch = false">取消</el-button><el-button type="primary" :loading="saving" @click="createTask">开始考勤</el-button></template></el-dialog>
   </el-container>
 </template>

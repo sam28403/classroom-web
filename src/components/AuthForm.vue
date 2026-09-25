@@ -13,7 +13,8 @@ const router = useRouter()
 const busy = ref(false)
 const refreshing = ref(false)
 const captchaImage = ref('')
-const form = reactive({ username: '', password: '', confirmPassword: '', role: 'student', code: '' })
+const resetMode = ref(false)
+const form = reactive({ number: '', name: '', username: '', password: '', confirmPassword: '', role: 'student', code: '' })
 const isRegister = props.mode === 'register'
 
 async function refreshCaptcha(force = false) {
@@ -33,10 +34,11 @@ async function refreshCaptcha(force = false) {
 async function submit() {
   if (busy.value || refreshing.value || !captchaImage.value) return
   const username = form.username.trim()
-  if (!username || !form.password || !form.code.trim()) {
+  if (!username || (!resetMode.value && !form.password) || !form.code.trim()) {
     ElMessage.error('请输入账号、密码和验证码')
     return
   }
+  if ((isRegister || resetMode.value) && (!form.number.trim() || !form.name.trim())) return ElMessage.error('请输入学号 / 工号和姓名')
   if (isRegister) {
     if (!/^[\p{L}\p{N}_-]{3,24}$/u.test(username)) {
       ElMessage.error('账号须为 3–24 位文字、数字、下划线或短横线')
@@ -54,13 +56,15 @@ async function submit() {
 
   busy.value = true
   try {
-    const result = await api(`/auth/${isRegister ? 'register' : 'login'}`, {
+    const result = await api(`/auth/${isRegister ? 'register' : resetMode.value ? 'reset-request' : 'login'}`, {
       method: 'POST',
-      body: JSON.stringify({ username, password: form.password, code: form.code, role: form.role }),
+      body: JSON.stringify({ username, password: form.password, code: form.code, role: form.role, name: form.name, number: form.number, [form.role === 'student' ? 'student_no' : 'teacher_no']: form.number }),
     })
     if (isRegister) {
       ElMessage.success(result.requiresApproval ? '注册成功，教师账号需管理员审核后登录。' : '注册成功，请登录。')
       await router.replace('/login')
+    } else if (resetMode.value) {
+      ElMessage.success(result.message); resetMode.value = false; await refreshCaptcha(true)
     } else {
       setUser(result.user)
       ElMessage.success('登录成功！')
@@ -80,23 +84,25 @@ onMounted(refreshCaptcha)
 <template>
   <section class="auth-section">
     <div class="auth-container">
-      <h2>{{ isRegister ? '用户注册' : '用户登录' }}</h2>
+      <h2>{{ isRegister ? '用户注册' : resetMode ? '申请重置密码' : '用户登录' }}</h2>
         <el-form label-position="top" class="profile-form" @submit.prevent="submit">
           <el-form-item label="账号">
             <el-input v-model="form.username" :placeholder="isRegister ? '设置用户名' : '输入用户名'" size="large" clearable autocomplete="username" />
           </el-form-item>
-          <el-form-item label="密码">
+          <el-form-item v-if="!resetMode" label="密码">
             <el-input v-model="form.password" type="password" show-password :placeholder="isRegister ? '至少 8 位，包含数字和非数字字符' : '输入密码'" size="large" clearable :autocomplete="isRegister ? 'new-password' : 'current-password'" />
           </el-form-item>
           <el-form-item v-if="isRegister" label="确认密码">
             <el-input v-model="form.confirmPassword" type="password" show-password placeholder="确认密码" size="large" clearable autocomplete="new-password" />
           </el-form-item>
-          <el-form-item v-if="isRegister" label="身份">
+          <el-form-item v-if="isRegister || resetMode" label="身份">
             <el-radio-group v-model="form.role" class="role-group">
               <el-radio-button value="teacher">教师</el-radio-button>
               <el-radio-button value="student">学生</el-radio-button>
             </el-radio-group>
           </el-form-item>
+          <template v-if="isRegister || resetMode"><el-form-item :label="form.role === 'student' ? '学号' : '工号'" required><el-input v-model="form.number" maxlength="64" placeholder="注册后不可修改" /></el-form-item><el-form-item label="姓名" required><el-input v-model="form.name" maxlength="80" placeholder="请输入真实姓名" /></el-form-item></template>
+          <el-alert v-if="resetMode" title="仅学生和教师可申请。提交后账号立即停用，现有登录失效；请联系管理员核实身份、重设密码并解禁。" type="warning" :closable="false" />
           <el-form-item label="验证码">
             <div class="captcha-group">
               <el-input v-model="form.code" maxlength="5" placeholder="输入图中字符" aria-label="验证码" size="large" :disabled="busy || refreshing" autocomplete="off" />
@@ -109,8 +115,9 @@ onMounted(refreshCaptcha)
             <div class="captcha-hint">5 分钟内有效，不区分大小写</div>
           </el-form-item>
         <div class="button-group">
-          <el-button class="auth-submit" type="primary" native-type="submit" :loading="busy">{{ isRegister ? '注册' : '登录' }}</el-button>
+          <el-button class="auth-submit" type="primary" native-type="submit" :loading="busy">{{ isRegister ? '注册' : resetMode ? '提交申请并停用账号' : '登录' }}</el-button>
           <el-button class="auth-switch" @click="router.push(isRegister ? '/login' : '/register')">{{ isRegister ? '返回登录界面' : '没有账号？去注册' }}</el-button>
+          <el-button v-if="!isRegister" class="auth-switch" :disabled="busy" @click="resetMode = !resetMode; refreshCaptcha()">{{ resetMode ? '返回登录' : '忘记密码？申请重置' }}</el-button>
         </div>
         </el-form>
     </div>

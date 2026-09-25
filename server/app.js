@@ -7,6 +7,7 @@ import DatabaseSessionStore, { sessionAge } from './session-store.js'
 import { auth, cookieOptions } from './auth.js'
 import { business } from './business.js'
 import { scheduling } from './scheduling.js'
+import { workflows } from './workflows.js'
 import { faces } from './faces.js'
 import { fail } from './http.js'
 import { isAllowedOrigin } from './origin.js'
@@ -38,7 +39,7 @@ app.use(session({
   cookie: { ...cookieOptions, maxAge: sessionAge },
 }))
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
-app.use('/api', auth, business, scheduling, faces)
+app.use('/api', auth, business, scheduling, workflows, faces)
 app.use('/api', (_req, res) => res.status(404).json({ message: '接口不存在' }))
 app.use(express.static(fileURLToPath(new URL('../dist', import.meta.url))))
 app.use((error, _req, res, _next) => {

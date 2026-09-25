@@ -6,12 +6,13 @@ import { promisify } from 'node:util'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import db from './db/db.js'
+import { submitRequest } from './requests.js'
 import { authenticate, audit, fail, string, roles, choice, id } from './http.js'
 
 const scrypt = promisify(scryptCallback)
 export const cookieOptions = { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production' }
 const publicUser = ({ id, username, role, avatar }) => ({ id, username, role, avatar })
-async function revokeUserSessions(userId) {
+export async function revokeUserSessions(userId) {
   for (const row of await db.all('SELECT sid,data FROM sessions')) {
     if (JSON.parse(row.data).userId === userId) {
       await db.run('DELETE FROM sessions WHERE sid=?', [row.sid])
@@ -21,19 +22,19 @@ async function revokeUserSessions(userId) {
     }
   }
 }
-function validatePassword(password, min = 8) {
+export function validatePassword(password, min = 8) {
   if (typeof password !== 'string' || password.length < min || Buffer.byteLength(password) > 72 || !/\d/.test(password) || !/[^0-9]/.test(password)) {
     fail(400, `密码须至少 ${min} 位，最多 72 字节，并包含数字和非数字字符`)
   }
 }
-export async function createUser(username, password, role, status = 'active') {
+export async function createUser(username, password, role, status = 'active', profile = {}) {
   const hash = await bcrypt.hash(password, 12)
   return db.transaction(async () => {
     const result = db.legacyPassword
       ? await db.run('INSERT INTO users(username,password,password_hash,role,status) VALUES (?,?,?,?,?)', [username, hash, hash, role, status])
       : await db.run('INSERT INTO users(username,password_hash,role,status) VALUES (?,?,?,?)', [username, hash, role, status])
-    if (role === 'student') await db.run('INSERT INTO students(user_id,student_no,name) VALUES (?,?,?)', [result.insertId, username, username])
-    if (role === 'teacher') await db.run('INSERT INTO teachers(user_id,teacher_no,name) VALUES (?,?,?)', [result.insertId, username, username])
+    if (role === 'student') await db.run('INSERT INTO students(user_id,student_no,name) VALUES (?,?,?)', [result.insertId, profile.number || username, profile.name || username])
+    if (role === 'teacher') await db.run('INSERT INTO teachers(user_id,teacher_no,name) VALUES (?,?,?)', [result.insertId, profile.number || username, profile.name || username])
     return result.insertId
   })
 }
@@ -51,7 +52,7 @@ if (!await db.get("SELECT id FROM users WHERE role='admin' LIMIT 1")) {
 
 export const auth = Router()
 const attempts = new Map()
-auth.use(['/captcha', '/auth/login', '/auth/register', '/user/login', '/user/register'], (req, _res, next) => {
+auth.use(['/captcha', '/auth/login', '/auth/register', '/auth/reset-request', '/user/login', '/user/register'], (req, _res, next) => {
   const time = Date.now()
   for (const [key, value] of attempts) if (value.expires < time) attempts.delete(key)
   const key = req.ip
@@ -72,7 +73,7 @@ auth.get('/captcha', async (req, res) => {
   await promisify(req.session.save).call(req.session)
   res.json({ image: `data:image/svg+xml;base64,${Buffer.from(captcha.data).toString('base64')}` })
 })
-auth.post(['/auth/register', '/auth/login', '/user/register', '/user/login'], async (req, res) => {
+auth.post(['/auth/register', '/auth/login', '/user/register', '/user/login', '/auth/reset-request'], async (req, res) => {
   const captcha = await db.transaction(async () => {
     const row = await db.get('SELECT text,expires FROM captchas WHERE session_id=?' + db.lock, [req.sessionID])
     await db.run('DELETE FROM captchas WHERE session_id=?', [req.sessionID])
@@ -86,12 +87,30 @@ auth.post(['/auth/register', '/auth/login', '/user/register', '/user/login'], as
   }
   const username = string(req.body.username, '账号', 24)
   if (!/^[\p{L}\p{N}_-]{3,24}$/u.test(username)) fail(400, '账号须为 3–24 位文字、数字、下划线或短横线')
+  if (req.path === '/auth/reset-request') {
+    const role = choice(req.body.role, ['teacher', 'student'], '身份')
+    const number = string(req.body.number, '学号 / 工号', 64)
+    const name = string(req.body.name, '姓名', 80)
+    await db.transaction(async () => {
+      const target = await db.get('SELECT * FROM users WHERE username=?' + db.lock, [username])
+      if (!target || target.role !== role) fail(400, '账号或身份资料不匹配')
+      const table = role === 'student' ? 'students' : 'teachers'
+      const field = role === 'student' ? 'student_no' : 'teacher_no'
+      const profile = await db.get(`SELECT * FROM ${table} WHERE user_id=?`, [target.id])
+      if (profile?.[field] !== number || profile?.name !== name) fail(400, '账号或身份资料不匹配')
+      req.user = target
+      await submitRequest(req, 'password_reset', target.id, {})
+      await db.run("UPDATE users SET status='disabled' WHERE id=?", [target.id])
+      await revokeUserSessions(target.id)
+    })
+    return res.status(202).json({ success: true, message: '申请已提交，账号已停用，请联系管理员核实身份、重设密码并解禁' })
+  }
   if (typeof password !== 'string' || Buffer.byteLength(password) > 72) fail(400, '密码长度不合法')
   if (req.path.endsWith('register')) {
     validatePassword(password)
     choice(role, ['teacher', 'student'], '身份')
     // Teachers require approval; public registration must not grant staff privileges.
-    const userId = await createUser(username, password, role, role === 'teacher' ? 'pending' : 'active')
+    const userId = await createUser(username, password, role, role === 'teacher' ? 'pending' : 'active', { number: string(req.body[role === 'student' ? 'student_no' : 'teacher_no'], '学号 / 工号', 64), name: string(req.body.name, '姓名', 80) })
     await audit(req, 'register', 'users', userId)
     return res.status(201).json({ success: true, requiresApproval: role === 'teacher' })
   }
@@ -155,6 +174,8 @@ auth.patch('/users/:id', authenticate, roles('admin'), async (req, res) => {
   if (!target) fail(404, '账号不存在')
   if (target.role === 'admin') fail(403, '此接口不能停用管理员')
   await db.transaction(async () => {
+    await db.get('SELECT id FROM users WHERE id=?' + db.lock, [userId])
+    if (status === 'active' && await db.get("SELECT id FROM change_requests WHERE user_id=? AND kind='password_reset' AND status='pending'", [userId])) fail(409, '请先通过重置密码操作重设密码并解禁')
     await db.run('UPDATE users SET status=? WHERE id=?', [status, userId])
     if (status === 'disabled') await revokeUserSessions(userId)
     await audit(req, 'user.status', 'users', userId)
