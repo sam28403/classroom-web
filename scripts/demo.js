@@ -6,7 +6,8 @@ const addresses = Object.values(networkInterfaces())
   .flat()
   .filter((entry) => entry && !entry.internal && entry.family === 'IPv4')
   .map((entry) => entry.address)
-const origins = [...new Set(addresses)].map((address) => `http://${address}:${port}`)
+const localAddresses = [...new Set(addresses)]
+const origins = localAddresses.map((address) => `http://${address}:${port}`)
 const configuredOrigins = (process.env.APP_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -21,11 +22,20 @@ for (const origin of origins) {
   console.log(`  ${origin}`)
 }
 
+const apiPort = Number(process.env.API_PORT || 3001)
+console.log(`后端本机地址：http://127.0.0.1:${apiPort}`)
+console.log('后端局域网地址：')
+for (const address of localAddresses) {
+  console.log(`  http://${address}:${apiPort}`)
+}
+
 const child = spawn(process.execPath, [process.env.npm_execpath, 'run', 'dev'], {
   stdio: 'inherit',
   env: {
     ...process.env,
     CLASSROOM_DEMO: '1',
+    API_HOST: '0.0.0.0',
+    API_PROXY_TARGET: process.env.API_PROXY_TARGET || `http://127.0.0.1:${apiPort}`,
     APP_ORIGINS: [...new Set([
       ...configuredOrigins,
       `http://localhost:${port}`,
