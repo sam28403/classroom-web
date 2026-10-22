@@ -41,7 +41,10 @@ if (!await db.get("SELECT id FROM users WHERE role='admin' LIMIT 1")) {
 }
 
 export const auth = Router()
-auth.use(['/captcha', '/auth/login', '/auth/register', '/auth/reset-request', '/user/login', '/user/register'], createAuthLimiter())
+auth.use([
+  '/captcha', '/auth/login', '/android/auth/login', '/auth/register',
+  '/auth/reset-request', '/user/login', '/user/register',
+], createAuthLimiter())
 auth.get('/captcha', async (req, res) => {
   const captcha = svgCaptcha.create({ size: 5, noise: 3, color: true, background: '#eef2f6', ignoreChars: '0oO1ilI' })
   req.session.captchaExpires = Date.now() + 300_000
@@ -54,7 +57,10 @@ auth.get('/captcha', async (req, res) => {
   await promisify(req.session.save).call(req.session)
   res.json({ image: `data:image/svg+xml;base64,${Buffer.from(captcha.data).toString('base64')}` })
 })
-auth.post(['/auth/register', '/auth/login', '/user/register', '/user/login', '/auth/reset-request'], async (req, res) => {
+auth.post([
+  '/auth/register', '/auth/login', '/android/auth/login',
+  '/user/register', '/user/login', '/auth/reset-request',
+], async (req, res) => {
   const captcha = await db.transaction(async () => {
     const row = await db.get('SELECT text,expires FROM captchas WHERE session_id=?' + db.lock, [req.sessionID])
     await db.run('DELETE FROM captchas WHERE session_id=?', [req.sessionID])
@@ -115,7 +121,8 @@ auth.post(['/auth/register', '/auth/login', '/user/register', '/user/login', '/a
     await audit(req, 'register', 'users', userId)
     return res.status(202).json(response)
   }
-  const user = await login(req, username, password)
+  const platform = /^\/android\/auth\/login\/?$/i.test(req.path) ? 'android' : 'web'
+  const user = await login(req, username, password, platform)
   res.json({ success: true, user: publicUser(user) })
 })
 auth.get(['/auth/me', '/user/me'], authenticate, (req, res) => res.json({ user: publicUser(req.user) }))

@@ -23,9 +23,10 @@ async function saveSession(req, user, platform, createdAt) {
   await promisify(req.session.save).call(req.session)
 }
 
-export async function login(req, username, password) {
-  // The public endpoint currently accepts Web only. Android requires its own entrypoint.
-  if (req.body.client_type !== undefined && req.body.client_type !== 'web') {
+export async function login(req, username, password, platform = 'web') {
+  // The route selects the session slot; request data cannot override it.
+  if (!['web', 'android'].includes(platform)
+    || (req.body.client_type !== undefined && req.body.client_type !== platform)) {
     fail(400, '暂不支持该登录端类型')
   }
   const user = await db.get('SELECT * FROM users WHERE username=?', [username])
@@ -47,8 +48,8 @@ export async function login(req, username, password) {
       await db.run('UPDATE users SET password_hash=? WHERE id=?', [hash, user.id])
       if (db.legacyPassword) await db.run('UPDATE users SET password=? WHERE id=?', [hash, user.id])
     }
-    await revokeUserSessions(user.id, 'web')
-    await saveSession(req, current, 'web', Date.now())
+    await revokeUserSessions(user.id, platform)
+    await saveSession(req, current, platform, Date.now())
     req.user = current
     await audit(req, 'login', 'users', current.id)
     return current
