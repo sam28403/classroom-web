@@ -1,5 +1,6 @@
 import { networkInterfaces } from 'node:os'
 import { spawn } from 'node:child_process'
+import { demoOrigins } from './demo-origins.js'
 
 const port = 5173
 const addresses = Object.values(networkInterfaces())
@@ -8,10 +9,6 @@ const addresses = Object.values(networkInterfaces())
   .map((entry) => entry.address)
 const localAddresses = [...new Set(addresses)]
 const origins = localAddresses.map((address) => `http://${address}:${port}`)
-const configuredOrigins = (process.env.APP_ORIGINS || '')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean)
 
 if (process.env.NODE_ENV === 'production') {
   throw new Error('demo:full 用于开发演示，请移除 NODE_ENV=production 后重试')
@@ -36,11 +33,7 @@ const child = spawn(process.execPath, [process.env.npm_execpath, 'run', 'dev'], 
     CLASSROOM_DEMO: '1',
     API_HOST: '0.0.0.0',
     API_PROXY_TARGET: process.env.API_PROXY_TARGET || `http://127.0.0.1:${apiPort}`,
-    APP_ORIGINS: [...new Set([
-      ...configuredOrigins,
-      `http://localhost:${port}`,
-      ...origins,
-    ])].join(','),
+    APP_ORIGINS: demoOrigins(localAddresses, apiPort, process.env.APP_ORIGINS),
   },
 })
 

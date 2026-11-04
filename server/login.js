@@ -39,6 +39,9 @@ export async function login(req, username, password, platform = 'web') {
     valid = actual.length === expected.length && timingSafeEqual(actual, expected)
   } else if (user) valid = await bcrypt.compare(password, user.password_hash)
   if (!valid || !user) fail(401, '账号或密码错误')
+  if (platform === 'android' && user.role !== 'student') {
+    fail(403, '当前客户端仅支持学生登录，请使用学生账号。', 'ANDROID_STUDENT_ONLY')
+  }
 
   return db.transaction(async () => {
     const current = await allowedUser(user.id)

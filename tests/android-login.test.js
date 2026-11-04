@@ -125,3 +125,17 @@ test('Web and Android share the account login rate limit', async () => {
     }, attempt < 10 ? 400 : 429)
   }
 })
+
+test('Android rejects teacher and admin without creating or replacing sessions; Web remains available', async () => {
+  for (const role of ['teacher', 'admin']) {
+    const username = `android_reject_${role}`
+    const userId = await createUser(username, 'Password123', role)
+    const web = client(), device = client()
+    await web.login(username)
+    const result = await androidLogin(device, username, 'Password123', 403)
+    assert.equal(result.code, 'ANDROID_STUDENT_ONLY')
+    await device.request('/auth/me', 'GET', undefined, 401)
+    await web.request('/auth/me')
+    assert.equal((await db.all("SELECT sid FROM sessions WHERE user_id=? AND client_type='android'", [userId])).length, 0)
+  }
+})
