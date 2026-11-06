@@ -11,7 +11,7 @@ const displayedItems = computed(() => props.requests ?? items.value)
 const kinds = {
   course_create: '新增课程', course_update: '修改课程安排',
   session_update: '单次调课', course_cancel: '取消课程',
-  enrollment_remove: '移除课程学生', name_change: '修改姓名', password_reset: '重置密码',
+  enrollment_remove: '移除课程学生', name_change: '修改姓名', password_reset: '重置密码', avatar_change: '更换头像',
 }
 const labels = {
   course_name: '中文课程名称', english_name: '英文课程名称', name: '姓名 / 教学班名称',
@@ -21,7 +21,7 @@ const labels = {
 }
 function fields(payload) {
   return Object.entries({ ...payload, ...payload.schedule })
-    .filter(([key]) => !['schedule', 'revision'].includes(key))
+    .filter(([key]) => !['schedule', 'revision', 'imageId'].includes(key))
     .map(([key, value]) => {
       if (key === 'repeat') value = { once: '不重复', daily: '按天', weekly: '按周' }[value] || value
       if (key === 'weekdays') value = value.map(day => '周' + '日一二三四五六'[day]).join('、')
@@ -87,6 +87,9 @@ defineExpose({ load })
     <template v-if="selected">
       <p>申请人：{{ selected.username }} · {{ kinds[selected.kind] }}</p>
       <p>申请时间：{{ selected.created_at }}；审核时间：{{ selected.reviewed_at || '尚未审核' }}</p>
+      <el-image :key="selected.payload.imageId" v-if="selected.kind === 'avatar_change' && selected.status !== 'rejected'" :src="`/api/avatar-images/${selected.payload.imageId}`" alt="申请头像" fit="contain" style="max-width: 100%; max-height: 320px">
+        <template #error><p>照片已清理或暂时无法加载，请刷新后重试。</p></template>
+      </el-image>
       <el-descriptions :column="1" border>
         <el-descriptions-item
           v-for="[label, value] in fields(selected.payload)"

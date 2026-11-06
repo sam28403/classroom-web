@@ -15,7 +15,7 @@ export const { default: db } = await import('../../server/db/db.js')
 export const { createUser } = await import('../../server/auth.js')
 const server = app.listen(0, '127.0.0.1')
 await once(server, 'listening')
-const base = `http://127.0.0.1:${server.address().port}/api`
+export const base = `http://127.0.0.1:${server.address().port}/api`
 after(async () => {
   await new Promise(resolve => server.close(resolve))
   await db.close()
