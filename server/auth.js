@@ -36,7 +36,7 @@ export async function createUser(username, password, role, status = 'active', pr
 if (!await db.get("SELECT id FROM users WHERE role='admin' LIMIT 1")) {
   const password = process.env.ADMIN_PASSWORD
   if (!password) throw new Error('首次启动须设置 ADMIN_PASSWORD，系统不再生成明文凭据文件')
-  validatePassword(password, 12)
+  validatePassword(password)
   await createUser('admin', password, 'admin')
 }
 

@@ -22,7 +22,7 @@ Web 使用 `credentials: 'include'`；Android 使用持久 CookieJar。认证采
 | PATCH | `/users/{id}` | 管理员提交 `{status:"active"或"disabled"}`；审核教师或停用账户；不能操作管理员或已移除用户 |
 | DELETE | `/users/{id}` | 管理员移除学生 / 教师，撤销全部会话并拒绝其待办；学生退出选课，教师的有效教学班归档、考勤结束并通知学生；管理员不能被移除，已移除返回 404 |
 
-旧的 `/user/login`、`/user/register`、`/user/me`、`/user/logout` 保留兼容。注册账号 3–24 位文字、数字、下划线或短横线；密码至少 8 位，最多 72 UTF-8 字节，含数字和非数字。初始管理员密码至少 12 位。
+旧的 `/user/login`、`/user/register`、`/user/me`、`/user/logout` 保留兼容。注册账号 3–24 位文字、数字、下划线或短横线。注册密码和初始管理员密码均须至少 8 位、最多 72 个 UTF-8 字节，并包含数字和非数字字符。初始管理员密码通过 `.env` 的 `ADMIN_PASSWORD` 设置，见[本地启动](../README.md#本地启动)。
 
 ## 审批、排课、资料与通知
 

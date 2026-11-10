@@ -55,7 +55,7 @@ test('API health responds using only the Docker final-stage runtime files', asyn
       cwd: folder, timeout: 15000,
       env: {
         ...process.env, NODE_ENV: 'production', DB_DRIVER: 'sqlite', DATABASE_PATH: ':memory:',
-        ADMIN_PASSWORD: 'Runtime-test123', SESSION_SECRET: 'runtime-test-secret-at-least-32-characters',
+        ADMIN_PASSWORD: 'Runtime1', SESSION_SECRET: 'runtime-test-secret-at-least-32-characters',
         TRUST_PROXY: '0', APP_ORIGINS: 'https://classroom.example',
       },
     })

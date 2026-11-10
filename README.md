@@ -8,9 +8,11 @@ Vue 3 + Vite + Element Plus 网页端，Express 业务后端。提供课程排�
 
 ```sh
 npm install
-# 首次运行：复制 .env.example 为 .env，设置 ADMIN_PASSWORD（至少 12 位且含数字和非数字）
+# 首次运行前按下方说明配置 .env
 npm run dev
 ```
+
+首次启动前，将项目根目录中的 `.env.example` 复制为 `.env`，打开 `.env`，在 `ADMIN_PASSWORD=` 后填入自己设置的初始密码，再运行 `npm run dev`。密码至少 8 位、最多 72 个 UTF-8 字节，须包含数字和非数字字符。首次创建的管理员账号为 `admin`。
 
 `npm run dev` / `npm run dev:full` 同时启动 Vite（默认 5173）和 API（默认 3001），避免只启动前端导致验证码/API 不可用。单独启动前端用 `npm run dev:web`，单独 API 用 `npm run api`。默认地址：[首页](http://localhost:5173/)、[登录](http://localhost:5173/#/login)、[注册](http://localhost:5173/#/register)。
 
@@ -104,7 +106,7 @@ classroom-web/
 
 默认继续使用 `server/db/classroom.db`，启动时非破坏性补齐表、用户 password_hash/status 及学生/教师资料；已有 password 哈希保留，旧 scrypt 登录成功后升级为 bcrypt。首次运行前建议备份原数据库（停服后复制数据库及 WAL/SHM，或使用 SQLite backup）。SQLite 文件不会自动迁入 MySQL。
 
-新数据库初次启动创建 admin，必须通过 ADMIN_PASSWORD 指定初始密码（至少 12 位，最多 72 字节，包含数字和非数字）。不再生成明文凭据文件；旧部署若保留 `admin-credentials.txt`，请在确认已改密后删除。已有管理员不受 ADMIN_PASSWORD 变更影响。
+数据库中没有管理员时，启动会用 `.env` 中的 `ADMIN_PASSWORD` 创建 `admin`。修改该配置不会重置已有管理员的密码。旧部署若保留 `admin-credentials.txt`，请在确认已改密后删除。
 
 公开注册的学生可直接登录；教师需管理员通过 `PATCH /api/users/{id}` 设置 `{"status":"active"}` 审核。网页已提供管理员、教师和学生工作台，包括课程、用户管理、申请审核、账户设置与考勤页面。
 
