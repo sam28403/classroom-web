@@ -6,3 +6,7 @@ server/db/*.db*
 server/db/admin-credentials.txt
 tests
 test-results
+.env.*
+!.env.example
+state
+playwright-report
