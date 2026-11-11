@@ -56,7 +56,9 @@ users.delete('/users/:id', async (req, res) => {
     if (target.role === 'admin') fail(403, '不能移除管理员账号')
 
     // Keep referenced profiles and attendance history, but permanently remove access.
-    await db.run("UPDATE users SET status='deleted' WHERE id=?", [target.id])
+    await db.run("UPDATE users SET status='deleted',avatar=NULL WHERE id=?", [target.id])
+    // Approved, pending and historical photos are removed atomically with the account.
+    await db.run('DELETE FROM avatar_images WHERE user_id=?', [target.id])
     await revokeUserSessions(target.id)
     await db.run(`UPDATE change_requests SET status='rejected',review_note=?,reviewer_id=?,reviewed_at=?
       WHERE user_id=? AND status='pending'`, ['用户已移除', req.user.id, now(), target.id])

@@ -1,4 +1,5 @@
 import { fail } from './http.js'
+import { avatarDetectionProblem } from './avatar-policy.js'
 
 export async function detectAvatar(file) {
   const base = process.env.COMPREFACE_URL
@@ -16,19 +17,9 @@ export async function detectAvatar(file) {
   const data = await response.json().catch(() => ({}))
   if (!response.ok && data?.code === 28) fail(422, '未检测到人脸，请上传本人正脸照片', 'NO_FACE')
   if ([400, 422].includes(response.status)) fail(422, '图片无法用于人脸检测，请重新上传', 'INVALID_FACE')
-  if (!response.ok || !Array.isArray(data?.result)) fail(503, '人脸检测服务响应异常', 'FACE_UNAVAILABLE')
-  if (data.result.length === 0) fail(422, '未检测到人脸，请上传本人正脸照片', 'NO_FACE')
-  if (data.result.length !== 1) fail(422, '请上传只有一人的照片', 'MULTIPLE_FACES')
-  const face = data.result[0]
-  const probability = face?.box?.probability
-  const pose = face?.pose
-  if (!Number.isFinite(probability) || probability < 0 || probability > 1 || !pose || !['yaw', 'pitch', 'roll'].every(k => Number.isFinite(pose[k]))) {
-    fail(503, '人脸检测服务未返回姿态信息', 'FACE_UNAVAILABLE')
-  }
-  if (probability < 0.95) fail(422, '人脸不清晰，请重新拍摄', 'INVALID_FACE')
-  if (Math.abs(pose.yaw) > 20 || Math.abs(pose.pitch) > 20 || Math.abs(pose.roll) > 20) {
-    fail(422, '请上传面向镜头的正脸照片', 'FACE_NOT_FRONTAL')
-  }
+  if (!response.ok) fail(503, '人脸检测服务响应异常', 'FACE_UNAVAILABLE')
+  const problem = avatarDetectionProblem(data)
+  if (problem) fail(problem.status, problem.message, problem.code)
 }
 
 export async function faceRequest(path, file, method = 'POST') {

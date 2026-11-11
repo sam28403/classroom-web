@@ -21,7 +21,7 @@ const labels = {
 }
 function fields(payload) {
   return Object.entries({ ...payload, ...payload.schedule })
-    .filter(([key]) => !['schedule', 'revision', 'imageId'].includes(key))
+    .filter(([key]) => !['schedule', 'revision', 'imageId', 'photoConsent'].includes(key))
     .map(([key, value]) => {
       if (key === 'repeat') value = { once: '不重复', daily: '按天', weekly: '按周' }[value] || value
       if (key === 'weekdays') value = value.map(day => '周' + '日一二三四五六'[day]).join('、')
@@ -96,6 +96,7 @@ defineExpose({ load })
           :key="label" :label="label"
         >{{ value }}</el-descriptions-item>
       </el-descriptions>
+      <p v-if="selected.payload.photoConsent">照片处理同意时间：{{ selected.payload.photoConsent.acceptedAt }}</p>
       <p>{{ selected.review_note }}</p>
     </template>
   </el-dialog>

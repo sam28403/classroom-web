@@ -8,9 +8,11 @@ Vue 3 + Vite + Element Plus 网页端，Express 业务后端。提供课程排�
 
 ```sh
 npm install
-# 首次运行：复制 .env.example 为 .env，设置 ADMIN_PASSWORD（至少 12 位且含数字和非数字）
+# 首次运行前按下方说明配置 .env
 npm run dev
 ```
+
+首次启动前，将项目根目录中的 `.env.example` 复制为 `.env`，在 `ADMIN_PASSWORD=` 后设置初始密码。密码至少 8 位、最多 72 个 UTF-8 字节，须包含数字和非数字字符。首次创建的管理员账号为 `admin`。
 
 `npm run dev` / `npm run dev:full` 同时启动 Vite（默认 5173）和 API（默认 3001），避免只启动前端导致验证码/API 不可用。单独启动前端用 `npm run dev:web`，单独 API 用 `npm run api`。默认地址：[首页](http://localhost:5173/)、[登录](http://localhost:5173/#/login)、[注册](http://localhost:5173/#/register)。
 
@@ -104,7 +106,7 @@ classroom-web/
 
 默认继续使用 `server/db/classroom.db`，启动时非破坏性补齐表、用户 password_hash/status 及学生/教师资料；已有 password 哈希保留，旧 scrypt 登录成功后升级为 bcrypt。首次运行前建议备份原数据库（停服后复制数据库及 WAL/SHM，或使用 SQLite backup）。SQLite 文件不会自动迁入 MySQL。
 
-新数据库初次启动创建 admin，必须通过 ADMIN_PASSWORD 指定初始密码（至少 12 位，最多 72 字节，包含数字和非数字）。不再生成明文凭据文件；旧部署若保留 `admin-credentials.txt`，请在确认已改密后删除。已有管理员不受 ADMIN_PASSWORD 变更影响。
+新数据库初次启动创建 admin，必须通过 ADMIN_PASSWORD 指定初始密码（至少 8 位，最多 72 字节，包含数字和非数字）。不再生成明文凭据文件；旧部署若保留 `admin-credentials.txt`，请在确认已改密后删除。已有管理员不受 ADMIN_PASSWORD 变更影响。
 
 公开注册的学生可直接登录；教师需管理员通过 `PATCH /api/users/{id}` 设置 `{"status":"active"}` 审核。网页已提供管理员、教师和学生工作台，包括课程、用户管理、申请审核、账户设置与考勤页面。
 
@@ -223,10 +225,12 @@ npm run build
 本次验证：来源与安全相关 13 项测试通过；实际运行的 5173、3001 网页均返回 200，携带对应 Origin/Referer 的空登录请求均进入验证码校验（400 CAPTCHA_INVALID），不再返回跨站 403；不可信外部来源仍为 403。未使用真实用户凭据提交登录。
 # 学生头像上传与审核
 
-学生在网页「设置」中选择本人正脸 JPEG 或 PNG 照片（不超过 5MB），确认同意后提交。后端调用 CompreFace 检测服务，要求恰有一张人脸、人脸检测概率不低于 0.95，且头部 yaw、pitch、roll 的绝对值不超过 20 度。检测通过后申请进入「我的申请」，管理员在「申请审核」中查看照片并批准或拒绝。批准后头像变更，拒绝时清除待审核照片并保留原头像。
+学生在网页「设置」中选择本人正脸 JPEG 或 PNG 照片（不超过 5MB），裁剪为正方形并确认同意后提交。后端先校验同意字段，再调用 CompreFace 检测服务，要求恰有一张人脸、人脸检测概率不低于 0.95，且头部 yaw、pitch、roll 的绝对值不超过 20 度。检测通过后申请进入「我的申请」，管理员在「申请审核」中查看照片并批准或拒绝。批准后头像变更，拒绝时清除待审核照片并保留原头像。移除学生账号时，头像地址和已批准、待审核的照片在同一事务内清理。
 
 在 CompreFace 中创建独立的 Face Detection 服务，在后端环境变量中配置 `COMPREFACE_URL` 和该服务的 `COMPREFACE_DETECTION_API_KEY`。pose 插件必须可用。检测服务未配置或无法访问时不会生成申请。原有 `COMPREFACE_API_KEY` 仍用于人脸识别服务。请依据实际环境测试并调整检测阈值，自动检测无法保证识别照片中是否为本人或排除所有动画、合成图片，管理员须核对身份。
 
-网页和 Android 可共用会话 Cookie 登录及以下接口：`POST /api/avatar-requests` 使用 multipart 的 `file` 字段上传，成功返回 202 和 `requestId`；`GET /api/requests` 查看申请，类型为 `avatar_change`；`GET /api/avatar-images/:id` 查看授权图片；管理员使用现有 `PATCH /api/requests/:id` 和 `{ "status": "approved" | "rejected", "note": "审核说明" }` 审核。头像变更后调用 `GET /api/auth/me` 获取新的 `avatar`。本功能负责头像，不会更改已有考勤人脸样本。
+网页和 Android 可共用会话 Cookie 登录及以下接口：`POST /api/avatar-requests` 使用 multipart 的 `file` 字段上传，并在用户明确同意后发送文本字段 `consent=true`（旧版 Android 客户端需要同步），成功返回 202 和 `requestId`；`GET /api/requests` 查看申请，类型为 `avatar_change`；`GET /api/avatar-images/:id` 查看授权图片；管理员使用现有 `PATCH /api/requests/:id` 和 `{ "status": "approved" | "rejected", "note": "审核说明" }` 审核。头像变更后调用 `GET /api/auth/me` 获取新的 `avatar`。本功能负责头像，不会更改已有考勤人脸样本。
 
-验证说明：头像接口测试使用模拟的 CompreFace 响应，覆盖未登录、越权审核、格式和大小限制、无人脸、多个人脸、侧脸、检测服务异常、并发重复申请、批准及驳回、替换后的旧图清理，并检查传给检测服务的文件扩展名。模拟测试不能证明真实图片的识别效果。验收前需连接团队的 Detection 服务，用本人正脸、侧脸、多人照、猫狗、动画和风景图测试，并核对管理员审核后网页显示的头像。当前检测阈值为初始设置，需根据真实服务结果确认。
+验证按 `npm run test:unit` → `npm run test:integration` → `npm run test:e2e` → `npm run test:regression` 执行。浏览器测试默认使用本机 Chrome，并通过 HTTP 测试替身验证裁剪、提交、审核和删除流程。连接自行部署的 CompreFace 1.2.0 Detection 服务后，使用 `npm run test:e2e:real` 验收真实识别，并在执行后重跑回归。
+
+真实验收在服务端 `.env.test` 设置 `COMPREFACE_URL`、`COMPREFACE_DETECTION_API_KEY` 和 `AVATAR_E2E_FIXTURES`。测试目录放入 `face.jpg`、`cat.jpg`、`dog.jpg`、`cartoon.jpg`、`landscape.jpg`、`side.jpg`、`multiple.jpg`，确保居中裁剪后仍能覆盖预期场景。人像样本应使用有权用于测试的照片。`.env.test` 和测试照片应保存在本地，不进入 Git。检测请求启用 `face_plugins=pose`，未返回有效姿态数据时拒绝提交。
