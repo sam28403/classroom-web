@@ -120,3 +120,12 @@ schedule 字段为 `{date,start,end,location,repeat,interval?,weekdays?,until?}`
 5. 无人脸条件时，教师使用 manual；已有异常用 review 修正，GET reviews 核对留痕。
 6. 教师 end 后查询 records、reports 或导出 CSV；管理员核对 audit-logs。
 7. POST auth/logout，再用退出前的 Cookie 请求 auth/me 或 auth/refresh，均应为 401。
+
+### 学生头像
+
+| 方法 | 地址 | 说明 |
+| --- | --- | --- |
+| POST | `/avatar-requests` | 学生会话，`multipart/form-data`。上传单张不超过 5MB 的 JPEG 或 PNG，字段名 `file`。在用户明确同意后发送文本字段 `consent`，值为 `true`。成功返回 202 和 `requestId`。 |
+| GET | `/avatar-images/:id` | 图片所有者账号须为正常状态。所有者和管理员可读待审图片，其他登录用户仅可读该学生当前生效的头像。 |
+
+缺少有效同意字段时返回 400 `CONSENT_REQUIRED`，后端不会请求检测服务。检测不通过返回 422，服务不可用返回 503。`/requests` 中的申请类型为 `avatar_change`，管理员使用现有申请审核接口。批准后可通过 `/auth/me` 获取头像路径。删除学生会清除其头像和待审照片。

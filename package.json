@@ -12,9 +12,15 @@
     "start": "node --env-file-if-exists=.env server/app.js",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "node --test tests/avatar-policy.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/avatar-upload.test.js",
+    "test:e2e": "npm run build && node --test tests/e2e/avatar-browser.test.js",
+    "test:e2e:real": "npm run build && node --env-file-if-exists=.env.test --test tests/e2e/avatar-browser.test.js",
+    "test:regression": "npm test"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "element-plus": "^2.14.8",
@@ -27,6 +33,7 @@
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@vitejs/plugin-vue": "^6.0.10",
     "npm-run-all2": "^9.0.4",
     "vite": "8.3.7"

@@ -30,12 +30,21 @@ workflows.patch('/requests/:id', roles('admin'), async (req, res) => {
     if (!row) fail(404, '申请不存在')
     if (row.status !== 'pending') fail(409, '申请已经处理')
     if (row.kind === 'password_reset' && status === 'approved') fail(409, '密码重置申请请在用户管理中重设密码并解禁')
-    const applicant = await db.get('SELECT * FROM users WHERE id=?', [row.user_id])
+    const applicant = await db.get('SELECT * FROM users WHERE id=?' + db.lock, [row.user_id])
     let applied = {}
     if (status === 'approved') {
       if (applicant.status !== 'active') fail(409, '申请人账号非正常状态，不能批准')
       const body = JSON.parse(row.payload)
-      if (row.kind === 'name_change') {
+      if (row.kind === 'avatar_change') {
+        const imageId = id(body.imageId)
+        const image = await db.get('SELECT id FROM avatar_images WHERE id=? AND user_id=?', [imageId, applicant.id])
+        if (!image) fail(409, '待审核照片不存在')
+        const previous = /^\/api\/avatar-images\/(\d+)$/.exec(applicant.avatar || '')
+        await db.run('UPDATE users SET avatar=? WHERE id=?', [`/api/avatar-images/${imageId}`, applicant.id])
+        if (previous && Number(previous[1]) !== imageId) {
+          await db.run('DELETE FROM avatar_images WHERE id=? AND user_id=?', [Number(previous[1]), applicant.id])
+        }
+      } else if (row.kind === 'name_change') {
         const table = applicant.role === 'student' ? 'students' : 'teachers'
         await db.run(`UPDATE ${table} SET name=? WHERE user_id=?`, [string(body.name, '姓名', 80), applicant.id])
       } else {
@@ -45,6 +54,10 @@ workflows.patch('/requests/:id', roles('admin'), async (req, res) => {
         const response = { headersSent: false, status() { return this }, json(value) { applied = value; this.headersSent = true; return this } }
         await handler({ user: applicant, body, params: { id: row.target_id }, approved: true }, response)
       }
+    }
+    if (status === 'rejected' && row.kind === 'avatar_change') {
+      const imageId = id(JSON.parse(row.payload).imageId)
+      await db.run('DELETE FROM avatar_images WHERE id=? AND user_id=?', [imageId, applicant.id])
     }
     await db.run('UPDATE change_requests SET status=?,review_note=?,reviewer_id=?,reviewed_at=? WHERE id=?', [status, note, req.user.id, now(), row.id])
     await audit(req, `request.${status}`, 'change_requests', row.id)

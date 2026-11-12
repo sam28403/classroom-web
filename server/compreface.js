@@ -1,4 +1,26 @@
 import { fail } from './http.js'
+import { avatarDetectionProblem } from './avatar-policy.js'
+
+export async function detectAvatar(file) {
+  const base = process.env.COMPREFACE_URL
+  const key = process.env.COMPREFACE_DETECTION_API_KEY
+  if (!base || !key) fail(503, '人脸检测服务尚未配置', 'FACE_UNAVAILABLE')
+  const form = new FormData()
+  const filename = file.mimetype === 'image/png' ? 'avatar.png' : 'avatar.jpg'
+  form.append('file', new Blob([file.buffer], { type: file.mimetype }), filename)
+  let response
+  try {
+    response = await fetch(`${base.replace(/\/$/, '')}/api/v1/detection/detect?limit=0&face_plugins=pose`, {
+      method: 'POST', headers: { 'x-api-key': key }, body: form, signal: AbortSignal.timeout(10000),
+    })
+  } catch { fail(503, '人脸检测服务不可用', 'FACE_UNAVAILABLE') }
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok && data?.code === 28) fail(422, '未检测到人脸，请上传本人正脸照片', 'NO_FACE')
+  if ([400, 422].includes(response.status)) fail(422, '图片无法用于人脸检测，请重新上传', 'INVALID_FACE')
+  if (!response.ok) fail(503, '人脸检测服务响应异常', 'FACE_UNAVAILABLE')
+  const problem = avatarDetectionProblem(data)
+  if (problem) fail(problem.status, problem.message, problem.code)
+}
 
 export async function faceRequest(path, file, method = 'POST') {
   const base = process.env.COMPREFACE_URL

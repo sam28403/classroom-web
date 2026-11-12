@@ -223,3 +223,14 @@ npm run build
 演示模式同时允许本机前端端口和 API 端口的精确网页来源，包含本机 IPv4、localhost、127.0.0.1 和 IPv6 回环地址。修复后端端口虽能展示网页、却因只登记前端来源而拒绝正常同源登录的问题。自定义 API_PORT 与已有 APP_ORIGINS 继续保留；外部来源及 opaque/null 来源仍拒绝。生产环境来源校验不变。换网后需重新启动演示命令获取新地址。
 
 本次验证：来源与安全相关 13 项测试通过；实际运行的 5173、3001 网页均返回 200，携带对应 Origin/Referer 的空登录请求均进入验证码校验（400 CAPTCHA_INVALID），不再返回跨站 403；不可信外部来源仍为 403。未使用真实用户凭据提交登录。
+# 学生头像上传与审核
+
+学生在网页「设置」中选择本人正脸 JPEG 或 PNG 照片（不超过 5MB），裁剪为正方形并确认同意后提交。后端先校验同意字段，再调用 CompreFace 检测服务，要求恰有一张人脸、人脸检测概率不低于 0.95，且头部 yaw、pitch、roll 的绝对值不超过 20 度。检测通过后申请进入「我的申请」，管理员在「申请审核」中查看照片并批准或拒绝。批准后头像变更，拒绝时清除待审核照片并保留原头像。移除学生账号时，头像地址和已批准、待审核的照片在同一事务内清理。
+
+在 CompreFace 中创建独立的 Face Detection 服务，在后端环境变量中配置 `COMPREFACE_URL` 和该服务的 `COMPREFACE_DETECTION_API_KEY`。pose 插件必须可用。检测服务未配置或无法访问时不会生成申请。原有 `COMPREFACE_API_KEY` 仍用于人脸识别服务。请依据实际环境测试并调整检测阈值，自动检测无法保证识别照片中是否为本人或排除所有动画、合成图片，管理员须核对身份。
+
+网页和 Android 可共用会话 Cookie 登录及以下接口：`POST /api/avatar-requests` 使用 multipart 的 `file` 字段上传，并在用户明确同意后发送文本字段 `consent=true`（旧版 Android 客户端需要同步），成功返回 202 和 `requestId`；`GET /api/requests` 查看申请，类型为 `avatar_change`；`GET /api/avatar-images/:id` 查看授权图片；管理员使用现有 `PATCH /api/requests/:id` 和 `{ "status": "approved" | "rejected", "note": "审核说明" }` 审核。头像变更后调用 `GET /api/auth/me` 获取新的 `avatar`。本功能负责头像，不会更改已有考勤人脸样本。
+
+验证按 `npm run test:unit` → `npm run test:integration` → `npm run test:e2e` → `npm run test:regression` 执行。浏览器测试默认使用本机 Chrome，并通过 HTTP 测试替身验证裁剪、提交、审核和删除流程。连接自行部署的 CompreFace 1.2.0 Detection 服务后，使用 `npm run test:e2e:real` 验收真实识别，并在执行后重跑回归。
+
+真实验收在服务端 `.env.test` 设置 `COMPREFACE_URL`、`COMPREFACE_DETECTION_API_KEY` 和 `AVATAR_E2E_FIXTURES`。测试目录放入 `face.jpg`、`cat.jpg`、`dog.jpg`、`cartoon.jpg`、`landscape.jpg`、`side.jpg`、`multiple.jpg`，确保居中裁剪后仍能覆盖预期场景。人像样本应使用有权用于测试的照片。`.env.test` 和测试照片应保存在本地，不进入 Git。检测请求启用 `face_plugins=pose`，未返回有效姿态数据时拒绝提交。
