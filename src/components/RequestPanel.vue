@@ -96,7 +96,14 @@ defineExpose({ load })
     width="min(640px, 94vw)" @close="selected = null"
   >
     <template v-if="selected">
-      <el-image :key="selected.payload.imageId" v-if="selected.kind === 'avatar_change' && selected.status !== 'rejected'" :src="`/api/avatar-images/${selected.payload.imageId}`" alt="申请头像" fit="contain" style="max-width: 100%; max-height: 320px">
+      <el-image
+        v-if="selected.kind === 'avatar_change' && selected.status !== 'rejected'"
+        :key="selected.payload.imageId"
+        :src="`/api/avatar-images/${selected.payload.imageId}`"
+        alt="申请头像"
+        fit="contain"
+        class="avatar-review-image"
+      >
         <template #error><p>照片已清理或暂时无法加载，请刷新后重试。</p></template>
       </el-image>
       <el-descriptions :column="1" border>
@@ -117,3 +124,11 @@ defineExpose({ load })
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.avatar-review-image {
+  display: block;
+  width: 100%;
+  height: 320px;
+}
+</style>
