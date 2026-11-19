@@ -23,7 +23,7 @@ const editor = ref(false), selectedCourse = ref(null), selectedSession = ref(nul
 const enrollment = ref(false), targetClass = ref(null)
 const launch = ref(false), launchClass = ref(null), duration = ref(15), lateMinutes = ref(5)
 const clock = ref(Date.now()), timer = setInterval(() => { clock.value = Date.now() }, 30000)
-onUnmounted(() => { clearInterval(timer); version++ })
+onUnmounted(() => { clearInterval(timer); clearInterval(attendanceTimer); version++ })
 const role = computed(() => user.value?.role)
 const menus = computed(() => [{ id: '', label: '控制面板', symbol: '▦' }, ...(role.value === 'admin' ? [{ id: 'users', label: '用户管理', symbol: '♙' }] : []), { id: 'courses', label: role.value === 'admin' ? '课程管理' : '课程列表', symbol: '▤' }, ...(role.value !== 'admin' ? [{ id: 'attendance', label: '考勤记录', symbol: '◷' }] : []), { id: 'requests', label: role.value === 'admin' ? '申请审核' : '我的申请', symbol: '✓' }, { id: 'settings', label: '设置', symbol: '⚙' }])
 const section = computed(() => String(route.params.section || ''))
@@ -44,6 +44,17 @@ const detailSessions = computed(() => sessions.value.filter((s) => s.teaching_cl
 const liveTasks = computed(() => tasks.value.filter((t) => t.status === 'active' && Date.parse(t.end_at) > clock.value))
 const stats = computed(() => role.value === 'admin' ? [['注册用户', users.value.length], ['待处理审批', pendingCount.value], ['有效教学班', activeClasses.value.length], ['今日课次', today.value.length]] : role.value === 'teacher' ? [['我的教学班', activeClasses.value.length], ['今日课次', today.value.length], ['未结束考勤', liveTasks.value.length], ['后续课次', sessions.value.filter((s) => Date.parse(s.start_at) > clock.value).length]] : [['我的课程', activeClasses.value.length], ['今日课次', today.value.length], ['可签到任务', tasks.value.length], ['考勤记录', records.value.length]])
 let version = 0
+let attendanceLoading = false
+const attendanceTimer = setInterval(async () => {
+  if (role.value !== 'student' || document.hidden || loading.value || attendanceLoading) return
+  const started = version
+  attendanceLoading = true
+  try {
+    const [available, personal] = await Promise.all([api('/attendance-tasks/available'), api('/attendance/me')])
+    if (started === version && role.value === 'student') { tasks.value = available.items; records.value = personal.items }
+  } catch (error) { if (error.status === 401) router.replace('/login') }
+  finally { attendanceLoading = false }
+}, 5000)
 async function refresh() {
   const request = ++version
   if (!user.value) return
@@ -92,7 +103,7 @@ function addStudent(c = null) {
   targetClass.value = c?.id || activeClasses.value[0]?.id || null
   enrollment.value = true
 }
-function launchTask() { launchClass.value = activeClasses.value[0]?.id || null; launch.value = true }
+function launchTask(course = null) { launchClass.value = course?.id || activeClasses.value[0]?.id || null; launch.value = true }
 async function createTask() {
   if (!launchClass.value || !duration.value || lateMinutes.value == null || lateMinutes.value > duration.value) return ElMessage.warning('请检查课程和签到时间设置')
   const start = Date.now()
@@ -164,7 +175,7 @@ async function createTask() {
     <CourseDetails
       :course="details" :sessions="detailSessions" :role="role" :now="clock" :busy="saving"
       @close="details = null" @edit="edit(details, $event)" @add-student="addStudent(details)"
-      @cancel="cancelCourse(details)" @archive="archive(details)" @changed="refresh"
+      @launch="launchTask(details)" @cancel="cancelCourse(details)" @archive="archive(details)" @changed="refresh"
     />
     <StudentEnrollmentDialog
       v-model="enrollment" :classes="classes" :initial-class-id="targetClass" @saved="refresh"

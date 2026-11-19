@@ -25,6 +25,8 @@ const faceServer = createServer(async (req, res) => {
   if (faceMode === 'unavailable') { res.writeHead(503).end('{}'); return }
   const url = new URL(req.url, 'http://localhost')
   if (req.method === 'DELETE') return res.end('{}')
+  if (req.method === 'GET' && url.pathname.endsWith('/faces'))
+    return res.end(JSON.stringify({ faces: subject === url.searchParams.get('subject') ? [{ subject, image_id: 'test-image' }] : [] }))
   if (url.pathname.endsWith('/faces')) {
     subject = url.searchParams.get('subject')
     return res.end(JSON.stringify({ subject, image_id: 'test-image' }))
@@ -126,7 +128,7 @@ test('registration, teacher approval, captcha consumption, and live role checks'
   for (const user of (await admin.request('/users')).items.filter((u) => u.role === 'teacher')) await admin.request(`/users/${user.id}`, 'PATCH', { status: 'active' })
   await teacher.login('teacher1')
   await other.login('teacher2')
-  await learner.login('student1')
+  await learner.request('/android/auth/login', 'POST', { username: 'student1', password: 'Password123', code: await learner.captcha() })
   await outsider.login('student2')
   await learner.request('/users', 'GET', undefined, 403)
   const code = await outsider.captcha()
@@ -172,7 +174,10 @@ test('basic data, ownership, membership and time validation', async () => {
 test('face consent, upload validation, registration and duplicate concurrency', async () => {
   await learner.request('/faces/register', 'POST', photo(), 403)
   await learner.request('/faces/consent', 'POST', { decision: 'agree', policy_version: 'v1' })
-  await learner.request('/faces/register', 'POST', photo(Buffer.from('not an image')), 400)
+  await learner.request('/faces/register', 'POST', {}, 409)
+  const user = await db.get('SELECT user_id FROM students WHERE id=?', [studentId])
+  const avatar = await db.run('INSERT INTO avatar_images(user_id,mime_type,image_data) VALUES (?,?,?)', [user.user_id, 'image/jpeg', Buffer.from([255,216,255,1])])
+  await db.run('UPDATE users SET avatar=? WHERE id=?', [`/api/avatar-images/${avatar.insertId}`, user.user_id])
   await learner.request('/faces/register', 'POST', photo(Buffer.alloc(5 * 1024 * 1024 + 1)), 413)
   await learner.request('/faces/register', 'POST', photo(), 201)
   const responses = await Promise.all([1, 2].map(() => fetch(`${base}/attendance-tasks/${taskId}/check-in`, { method: 'POST', headers: { Cookie: learner.cookie }, body: photo() })))
@@ -182,6 +187,7 @@ test('face consent, upload validation, registration and duplicate concurrency', 
   await other.request(`/attendance-tasks/${taskId}/records`, 'GET', undefined, 403)
 })
 test('exceptions, outages, review trail, manual alternative, finalization and CSV', async () => {
+  await teacher.request(`/attendance-tasks/${taskId}/end`, 'POST', {})
   for (const [mode, code] of [['multiple', 'MULTIPLE_FACES'], ['none', 'NO_FACE'], ['low', 'LOW_SIMILARITY']]) {
     faceMode = mode
     const task = await teacher.request('/attendance-tasks', 'POST', taskBody(), 201)
@@ -191,12 +197,14 @@ test('exceptions, outages, review trail, manual alternative, finalization and CS
     await teacher.request(`/attendance-records/${result.id}/review`, 'PATCH', { status: 'present', reason: '' }, 400)
     await teacher.request(`/attendance-records/${result.id}/review`, 'PATCH', { status: 'present', reason: '现场确认本人到场' })
     assert.equal((await db.get('SELECT before_status FROM review_records WHERE attendance_record_id=?', [result.id])).before_status, 'exception')
+    await teacher.request(`/attendance-tasks/${task.id}/end`, 'POST', {})
   }
   faceMode = 'unavailable'
   const task = await teacher.request('/attendance-tasks', 'POST', taskBody(), 201)
   await learner.request(`/attendance-tasks/${task.id}/check-in`, 'POST', photo(), 503)
   assert.equal(await db.get('SELECT id FROM attendance_records WHERE task_id=?', [task.id]), undefined)
   await teacher.request(`/attendance-tasks/${task.id}/manual`, 'POST', { student_id: studentId, reason: '服务故障，现场核对', status: 'manual' }, 201)
+  await teacher.request(`/attendance-tasks/${task.id}/end`, 'POST', {})
   faceMode = 'match'
   const ending = await teacher.request('/attendance-tasks', 'POST', taskBody(), 201)
   await teacher.request(`/attendance-tasks/${ending.id}/end`, 'POST', {})

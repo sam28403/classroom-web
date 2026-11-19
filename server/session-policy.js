@@ -14,6 +14,7 @@ export async function revokeUserSessions(userId, platform = null) {
     let data
     try { data = JSON.parse(row.data) } catch { data = null }
     if (data && (data.userId !== userId || (platform && clientType(data) !== platform))) continue
+    await db.run('DELETE FROM push_devices WHERE session_id=?', [row.sid])
     await db.run('DELETE FROM sessions WHERE sid=?', [row.sid])
     await db.run('DELETE FROM captchas WHERE session_id=?', [row.sid])
     if (!await db.get('SELECT sid FROM revoked_sessions WHERE sid=?', [row.sid])) {

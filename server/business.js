@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from './db/db.js'
 import { notifyClass } from './requests.js'
+import { queueAttendancePush } from './push.js'
 import { archiveTeachingClass } from './classroom-lifecycle.js'
 import { listEnrollments, removeEnrollment } from './enrollments.js'
 import { listStudentCandidates, addStudents } from './student-enrollment.js'
@@ -114,7 +115,16 @@ business.post('/attendance-tasks', teacher, async (req, res) => {
   if (classroom.status !== 'active') fail(409, '教学班已归档')
   const start = date(req.body.start_at), late = date(req.body.late_at), end = date(req.body.end_at)
   if (!(start <= late && late <= end && start < end && end > now())) fail(400, '签到时间顺序错误或结束时间已过期')
-  const result = await mutation(req, 'create', 'attendance_tasks', () => db.run('INSERT INTO attendance_tasks(teaching_class_id,start_at,late_at,end_at) VALUES (?,?,?,?)', [classroom.id, start, late, end]))
+  const result = await mutation(req, 'create', 'attendance_tasks', async () => {
+    const current = await db.get('SELECT status FROM teaching_classes WHERE id=?' + db.lock, [classroom.id])
+    if (current?.status !== 'active') fail(409, '教学班已归档')
+    const overlap = await db.get("SELECT id FROM attendance_tasks WHERE teaching_class_id=? AND status IN ('active','paused') AND start_at<? AND end_at>? LIMIT 1" + db.lock, [classroom.id, end, start])
+    if (overlap) fail(409, '该教学班已有同时段考勤，请先结束已有考勤', 'TASK_CONFLICT')
+    const row = await db.run('INSERT INTO attendance_tasks(teaching_class_id,start_at,late_at,end_at) VALUES (?,?,?,?)', [classroom.id, start, late, end])
+    await notifyClass(classroom.id, `已发起人脸考勤，请在安卓 App 现场拍照签到，截止时间 ${new Date(end).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}。`)
+    await queueAttendancePush(row.insertId, classroom.id)
+    return row
+  })
   res.status(201).json({ id: result.insertId })
 })
 business.get('/attendance-tasks', teacher, async (req, res) => {
@@ -152,7 +162,9 @@ business.get('/attendance-tasks/available', learner, async (req, res) => {
   const s = await student(req), time = now()
   res.json({ items: await db.all(`SELECT t.*,c.name FROM attendance_tasks t JOIN teaching_classes c ON c.id=t.teaching_class_id
     JOIN enrollments e ON e.teaching_class_id=t.teaching_class_id
-    WHERE e.student_id=? AND e.status='active' AND c.status='active' AND t.status='active' AND t.start_at<=? AND t.end_at>? ORDER BY t.start_at`, [s.id, time, time]) })
+    WHERE e.student_id=? AND e.status='active' AND c.status='active' AND t.status='active' AND t.start_at<=? AND t.end_at>?
+    AND NOT EXISTS (SELECT 1 FROM attendance_records r WHERE r.task_id=t.id AND r.student_id=e.student_id)
+    ORDER BY t.start_at`, [s.id, time, time]) })
 })
 business.get('/attendance/me', learner, async (req, res) => {
   const s = await student(req)
@@ -160,7 +172,17 @@ business.get('/attendance/me', learner, async (req, res) => {
 })
 business.get('/attendance-tasks/:id/records', teacher, async (req, res) => {
   await taskForTeacher(req, req.params.id)
-  res.json({ items: await db.all('SELECT r.*,s.name,s.student_no FROM attendance_records r JOIN students s ON s.id=r.student_id WHERE r.task_id=? ORDER BY r.id', [id(req.params.id)]) })
+  const taskId = id(req.params.id)
+  const items = await db.all(`SELECT r.id,r.task_id,s.id AS student_id,s.name,s.student_no,
+    COALESCE(r.status,'unrecorded') AS status,r.source,r.checked_at,r.similarity
+    FROM students s LEFT JOIN attendance_records r ON r.student_id=s.id AND r.task_id=?
+    WHERE r.id IS NOT NULL OR EXISTS (SELECT 1 FROM enrollments e
+      JOIN attendance_tasks t ON t.teaching_class_id=e.teaching_class_id
+      WHERE t.id=? AND t.status<>'ended' AND e.student_id=s.id AND e.status='active')
+    ORDER BY s.student_no,s.id`, [taskId, taskId])
+  const counts = {}
+  for (const row of items) { row.task_id = taskId; counts[row.status] = (counts[row.status] || 0) + 1 }
+  res.json({ items, total: items.length, counts })
 })
 business.patch('/attendance-records/:id/review', teacher, async (req, res) => {
   const after = choice(req.body.status, statuses), reason = string(req.body.reason, '复核原因', 500)
@@ -185,12 +207,18 @@ business.post('/attendance-tasks/:id/manual', teacher, async (req, res) => {
   const status = choice(req.body.status || 'manual', statuses), reason = string(req.body.reason, '登记原因', 500)
   const result = await mutation(req, 'manual', 'attendance_records', async () => {
     await db.get('SELECT id FROM attendance_tasks WHERE id=?' + db.lock, [task.id])
+    const existing = await db.get('SELECT * FROM attendance_records WHERE task_id=? AND student_id=?' + db.lock, [task.id, studentId])
+    if (existing) {
+      await db.run('INSERT INTO review_records(attendance_record_id,reviewer_id,before_status,after_status,reason,created_at) VALUES (?,?,?,?,?,?)', [existing.id, req.user.id, existing.status, status, reason, now()])
+      await db.run('UPDATE attendance_records SET status=? WHERE id=?', [status, existing.id])
+      return { insertId: existing.id, updated: true }
+    }
     if (!await db.get("SELECT id FROM enrollments WHERE teaching_class_id=? AND student_id=? AND status='active'", [task.teaching_class_id, studentId])) fail(403, '学生不是本教学班成员')
     const row = await db.run("INSERT INTO attendance_records(task_id,student_id,status,source,checked_at) VALUES (?,?,?,'manual',?)", [task.id, studentId, status, now()])
     await db.run('INSERT INTO review_records(attendance_record_id,reviewer_id,before_status,after_status,reason,created_at) VALUES (?,?,?,?,?,?)', [row.insertId, req.user.id, 'unrecorded', status, reason, now()])
     return row
   })
-  res.status(201).json({ id: result.insertId })
+  res.status(result.updated ? 200 : 201).json({ id: result.insertId })
 })
 business.get('/reports/teaching-classes/:id', teacher, async (req, res) => {
   await ownedClass(req, req.params.id)

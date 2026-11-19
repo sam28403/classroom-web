@@ -31,14 +31,12 @@ async function fixture() {
   }, 201)
   const tasks = []
   for (const status of ['active', 'paused', 'ended']) {
-    const task = await teacher.request('/attendance-tasks', 'POST', {
-      teaching_class_id: classroom.id,
-      start_at: new Date(Date.now() - 60000).toISOString(),
-      late_at: new Date(Date.now() + 60000).toISOString(),
-      end_at: new Date(Date.now() + 600000).toISOString(),
-    }, 201)
-    await db.run('UPDATE attendance_tasks SET status=? WHERE id=?', [status, task.id])
-    tasks.push(task.id)
+    // Older databases may contain overlapping tasks. Archiving must handle them.
+    const task = await db.run('INSERT INTO attendance_tasks(teaching_class_id,start_at,late_at,end_at,status) VALUES (?,?,?,?,?)', [
+      classroom.id, new Date(Date.now() - 60000).toISOString(),
+      new Date(Date.now() + 60000).toISOString(), new Date(Date.now() + 600000).toISOString(), status,
+    ])
+    tasks.push(task.insertId)
   }
   const record = await teacher.request(`/attendance-tasks/${tasks[0]}/manual`, 'POST', {
     student_id: studentId, status: 'manual', reason: '保留历史',

@@ -4,7 +4,7 @@ import CourseStudents from './CourseStudents.vue'
 import CourseSessionTable from './CourseSessionTable.vue'
 
 const props = defineProps({ course: Object, sessions: Array, role: String, now: Number, busy: Boolean })
-const emit = defineEmits(['close', 'edit', 'add-student', 'cancel', 'archive', 'changed'])
+const emit = defineEmits(['close', 'edit', 'add-student', 'cancel', 'archive', 'changed', 'launch'])
 const tab = ref('schedule')
 watch(() => props.course?.id, () => { tab.value = 'schedule' })
 </script>
@@ -20,6 +20,7 @@ watch(() => props.course?.id, () => { tab.value = 'schedule' })
         <span v-if="course.teacher_name">授课教师：{{ course.teacher_name }}</span>
       </div>
       <div v-if="role !== 'student'" class="course-actions">
+        <el-button v-if="role === 'teacher'" type="primary" :disabled="busy || course.status !== 'active'" @click="emit('launch')">发起考勤</el-button>
         <el-button type="primary" :disabled="busy || course.status !== 'active'" @click="emit('edit', null)">
           修改后续课程安排
         </el-button>

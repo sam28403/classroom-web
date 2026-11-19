@@ -11,6 +11,7 @@ import { workflows } from './workflows.js'
 import { faces } from './faces.js'
 import { avatars } from './avatars.js'
 import { users } from './users.js'
+import { push, startPushWorker } from './push.js'
 import { fail } from './http.js'
 import { checkRequestSource, configureProxy, securityHeaders } from './security.js'
 
@@ -34,7 +35,7 @@ app.use(session({
   cookie: { ...cookieOptions, maxAge: sessionAge },
 }))
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
-app.use('/api', auth, business, scheduling, workflows, faces, avatars, users)
+app.use('/api', auth, business, scheduling, workflows, faces, avatars, users, push)
 app.use('/api', (_req, res) => res.status(404).json({ message: '接口不存在' }))
 app.use(express.static(fileURLToPath(new URL('../dist', import.meta.url))))
 app.use((error, _req, res, _next) => {
@@ -53,6 +54,7 @@ app.use((error, _req, res, _next) => {
 })
 export default app
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  startPushWorker()
   const port = Number(process.env.API_PORT || 3001)
   app.listen(port, process.env.API_HOST || '127.0.0.1', () => console.log(`Classroom API listening on port ${port}`))
 }

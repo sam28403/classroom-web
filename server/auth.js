@@ -137,6 +137,7 @@ auth.post([
 auth.get(['/auth/me', '/user/me'], authenticate, (req, res) => res.json({ user: publicUser(req.user) }))
 auth.post(['/auth/logout', '/user/logout'], async (req, res) => {
   if (req.session.userId) req.user = await db.get('SELECT id FROM users WHERE id=?', [req.session.userId])
+  await db.run('DELETE FROM push_devices WHERE session_id=?', [req.sessionID])
   await promisify(req.session.destroy).call(req.session)
   res.clearCookie('connect.sid', cookieOptions)
   await audit(req, 'logout', 'users', req.user?.id)

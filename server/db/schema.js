@@ -21,6 +21,8 @@ export function schema(mysql) {
     `CREATE TABLE IF NOT EXISTS sessions (sid VARCHAR(128) PRIMARY KEY, data TEXT NOT NULL, expires BIGINT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS revoked_sessions (sid VARCHAR(128) PRIMARY KEY, expires BIGINT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS captchas (session_id VARCHAR(128) PRIMARY KEY, text VARCHAR(64) NOT NULL, expires BIGINT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS push_devices (id ${id}, user_id INTEGER NOT NULL, session_id VARCHAR(128) NOT NULL UNIQUE, token VARCHAR(512) NOT NULL UNIQUE, updated_at VARCHAR(30) NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id))`,
+    `CREATE TABLE IF NOT EXISTS push_deliveries (id ${id}, task_id INTEGER NOT NULL, user_id INTEGER NOT NULL, session_id VARCHAR(128) NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, available_at VARCHAR(30) NOT NULL, UNIQUE(task_id,session_id), FOREIGN KEY(task_id) REFERENCES attendance_tasks(id), FOREIGN KEY(user_id) REFERENCES users(id))`,
   ]
   return statements.map((sql) => mysql ? sql + ' ENGINE=InnoDB' : sql)
 }
