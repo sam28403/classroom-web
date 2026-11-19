@@ -83,17 +83,18 @@ schedule 字段为 `{date,start,end,location,repeat,interval?,weekdays?,until?}`
 | 方法 | 路径 | 权限与请求 |
 |---|---|---|
 | POST | `/attendance-tasks` | 对应教师：`{teaching_class_id,start_at,late_at,end_at}` |
-| GET | `/attendance-tasks` | 教师本人任务列表 |
+| GET | `/attendance-tasks` | 教师查看本人任务，管理员查看全部已结束任务。附课程名 `course_name`、教学班名 `class_name` |
 | PATCH | `/attendance-tasks/{id}` | 对应教师：`{status:"paused"或"active"}`；已结束/过期不能重开 |
 | POST | `/attendance-tasks/{id}/end` | 对应教师：结束，尚无记录的有效成员补记 absent；重复结束不重复插入 |
 | GET | `/attendance-tasks/available` | 学生：有效选课、未归档班级、当前开放时间内的任务 |
 | POST | `/attendance-tasks/{id}/check-in` | 安卓学生会话：multipart 现场图片；以审核通过头像为识别基准；先校验身份、选课、时段和重复记录，再调用识别；落库前再检查 |
 | GET | `/attendance/me` | 学生本人记录 |
-| GET | `/attendance-tasks/{id}/records` | 对应教师；完整名单含 unrecorded、total、counts |
+| GET | `/attendance-tasks/{id}/records` | 对应教师；管理员仅可查看已结束任务。列表含 total、counts，进行中未签到项为 unrecorded |
+| GET | `/attendance-tasks/{id}/report.html` | 对应教师或管理员。下载该次已结束考勤的 HTML 报告，未结束返回 409 ATTENDANCE_NOT_ENDED |
 | POST | `/attendance-tasks/{id}/manual` | 对应教师：`{student_id,status?,reason}`，非人脸替代流程，status 默认 manual；已有记录则使用 review |
 | PATCH | `/attendance-records/{id}/review` | 对应教师：`{status,reason}`，事务写入修改前后状态、操作者和原因，再更新结果 |
 | GET | `/attendance-records/{id}/reviews` | 对应教师：完整复核轨迹 |
-| GET | `/reports/teaching-classes/{id}` | 对应教师：counts、total、attendanceRate、items；`?format=csv` 导出（含公式注入转义） |
+| GET | `/reports/teaching-classes/{id}` | 对应教师：counts、total、attendanceRate、items；`?format=csv` 导出整个教学班已记录的考勤，包含多次任务（含公式注入转义）。教师网页从「考勤记录 → 记录 / 复核 → 导出本班考勤 CSV」进入 |
 | GET | `/audit-logs` | 管理员；`?limit=100&before=记录ID`，最大 500 条，按 ID 倒序分页 |
 
 时间必须带时区，如 `2026-09-24T08:00:00+08:00`，统一转为 UTC 存储。要求 `start_at ≤ late_at ≤ end_at` 且 start < end；签到区间为 `[start_at,end_at)`，等于 late_at 判迟到。状态包括 present、late、absent、leave、exception、manual。相似度不足、无人脸、多人脸记录为 exception，必须复核；服务故障不写考勤记录，允许重试或人工登记。

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import db from './db/db.js'
+import { renderAttendanceReport } from './attendance-report.js'
 import { notifyClass } from './requests.js'
 import { queueAttendancePush } from './push.js'
 import { archiveTeachingClass } from './classroom-lifecycle.js'
@@ -11,6 +12,7 @@ export const business = Router()
 business.use(authenticate)
 const admin = roles('admin')
 const teacher = roles('teacher')
+const attendanceReader = roles('teacher', 'admin')
 const learner = roles('student')
 const statuses = ['present', 'late', 'absent', 'leave', 'exception', 'manual']
 const credit = (value) => {
@@ -127,8 +129,14 @@ business.post('/attendance-tasks', teacher, async (req, res) => {
   })
   res.status(201).json({ id: result.insertId })
 })
-business.get('/attendance-tasks', teacher, async (req, res) => {
-  res.json({ items: await db.all('SELECT a.* FROM attendance_tasks a JOIN teaching_classes c ON c.id=a.teaching_class_id JOIN teachers t ON t.id=c.teacher_id WHERE t.user_id=? ORDER BY a.id DESC', [req.user.id]) })
+business.get('/attendance-tasks', attendanceReader, async (req, res) => {
+  const isAdmin = req.user.role === 'admin'
+  const filter = isAdmin ? "a.status='ended'" : 't.user_id=?'
+  const items = await db.all(`SELECT a.*,c.name AS class_name,k.course_name
+    FROM attendance_tasks a JOIN teaching_classes c ON c.id=a.teaching_class_id
+    JOIN courses k ON k.id=c.course_id JOIN teachers t ON t.id=c.teacher_id
+    WHERE ${filter} ORDER BY a.id DESC`, isAdmin ? [] : [req.user.id])
+  res.json({ items })
 })
 export async function taskForTeacher(req, taskId) {
   const task = await db.get('SELECT * FROM attendance_tasks WHERE id=?', [id(taskId)])
@@ -170,19 +178,36 @@ business.get('/attendance/me', learner, async (req, res) => {
   const s = await student(req)
   res.json({ items: await db.all('SELECT r.*,t.teaching_class_id,c.name FROM attendance_records r JOIN attendance_tasks t ON t.id=r.task_id JOIN teaching_classes c ON c.id=t.teaching_class_id WHERE r.student_id=? ORDER BY r.id DESC', [s.id]) })
 })
-business.get('/attendance-tasks/:id/records', teacher, async (req, res) => {
-  await taskForTeacher(req, req.params.id)
-  const taskId = id(req.params.id)
-  const items = await db.all(`SELECT r.id,r.task_id,s.id AS student_id,s.name,s.student_no,
+function requireEnded(task) {
+  if (task.status !== 'ended') fail(409, '请先结束考勤以归档名单', 'ATTENDANCE_NOT_ENDED')
+}
+async function attendanceRows(taskId) {
+  return db.all(`SELECT r.id,r.task_id,s.id AS student_id,s.name,s.student_no,
     COALESCE(r.status,'unrecorded') AS status,r.source,r.checked_at,r.similarity
     FROM students s LEFT JOIN attendance_records r ON r.student_id=s.id AND r.task_id=?
     WHERE r.id IS NOT NULL OR EXISTS (SELECT 1 FROM enrollments e
       JOIN attendance_tasks t ON t.teaching_class_id=e.teaching_class_id
       WHERE t.id=? AND t.status<>'ended' AND e.student_id=s.id AND e.status='active')
     ORDER BY s.student_no,s.id`, [taskId, taskId])
+}
+business.get('/attendance-tasks/:id/records', attendanceReader, async (req, res) => {
+  const task = await taskForTeacher(req, req.params.id)
+  if (req.user.role === 'admin') requireEnded(task)
+  const items = await attendanceRows(task.id)
   const counts = {}
-  for (const row of items) { row.task_id = taskId; counts[row.status] = (counts[row.status] || 0) + 1 }
+  for (const row of items) { row.task_id = task.id; counts[row.status] = (counts[row.status] || 0) + 1 }
   res.json({ items, total: items.length, counts })
+})
+business.get('/attendance-tasks/:id/report.html', attendanceReader, async (req, res) => {
+  const task = await taskForTeacher(req, req.params.id)
+  requireEnded(task)
+  const classroom = await db.get(`SELECT c.name AS class_name,k.course_name FROM teaching_classes c
+    JOIN courses k ON k.id=c.course_id WHERE c.id=?`, [task.teaching_class_id])
+  const items = await attendanceRows(task.id)
+  const html = renderAttendanceReport(task, classroom, items)
+  await audit(req, 'report.export', 'attendance_tasks', task.id)
+  res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+  res.attachment(`attendance-${task.id}.html`).send(html)
 })
 business.patch('/attendance-records/:id/review', teacher, async (req, res) => {
   const after = choice(req.body.status, statuses), reason = string(req.body.reason, '复核原因', 500)
