@@ -100,6 +100,7 @@ async function review(page, user, decision) {
   const photo = page.getByAltText('申请头像')
   await expect(photo).toBeVisible()
   await expect.poll(() => photo.evaluate(img => img.naturalWidth)).toBe(512)
+  await expect(photo).toHaveCSS('object-fit', 'contain')
   await expect.poll(() => photo.evaluate(img => {
     const image = img.getBoundingClientRect()
     const frame = img.closest('.el-image').getBoundingClientRect()
