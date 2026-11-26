@@ -4,6 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { user, loggingOut, loadUser, logout as endSession } from '@/auth.js'
 
+defineProps({
+  showGuestActions: { type: Boolean, default: true },
+})
+
 const route = useRoute()
 const router = useRouter()
 
@@ -26,7 +30,7 @@ onMounted(loadUser)
       <el-avatar class="brand-avatar" src="/classroom-mark.png" />
       <h2>Sam-Lab Classroom</h2>
     </router-link>
-    <div class="page-header-actions">
+    <div v-if="showGuestActions || user || route.path !== '/'" class="page-header-actions">
       <template v-if="route.path === '/' && !user">
         <el-button @click="router.push('/login')">登录</el-button>
         <el-button type="primary" @click="router.push('/register')">注册</el-button>

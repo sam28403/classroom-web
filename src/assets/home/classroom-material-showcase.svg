@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 150" role="img" aria-labelledby="art-title">
+<title id="art-title">考勤记录与头像审核</title>
+<!-- Material Symbols Rounded paths by Google, Apache License 2.0. Composition and colors adapted for Sam-Lab Classroom. -->
+<style>
+:root{--mint:#e2f4ed;--mint2:#ccebdc;--green:#26725b;--blue:#dbeaff;--blue2:#bcdbff;--inkblue:#2367ad;--violet:#ece9fb;--violet2:#dcd6f9;--purple:#6252a0;--sun:#f9eedb;--gold:#98662d;--paper:#fcfdff;--line:#c6d5e6;--gray:#eef4fc}
+@media(prefers-color-scheme:dark){:root{--mint:#223c34;--mint2:#305448;--green:#a6dbca;--blue:#263c59;--blue2:#3d5c86;--inkblue:#a2ceff;--violet:#322d4b;--violet2:#463d6d;--purple:#c8bcff;--sun:#463727;--gold:#efc998;--paper:#253041;--line:#4f6078;--gray:#39495f}}
+</style>
+
+<path fill="var(--mint)" d="M71 105C41 72 74 36 117 29c33-6 53 1 80-7 25-7 52-23 89-14 44 10 60 35 55 68-5 38-49 61-114 62-45 1-73-8-105-7-26 1-39-10-51-26z"/>
+<circle cx="295" cy="43" r="22" fill="var(--mint2)"/>
+<circle cx="100" cy="59" r="7" fill="var(--blue2)"/>
+<g transform="rotate(-8 184 73)">
+ <rect x="116" y="28" width="112" height="94" rx="16" fill="var(--mint2)" transform="translate(4 6)"/>
+ <rect x="116" y="28" width="112" height="94" rx="16" fill="var(--paper)" stroke="var(--line)"/>
+ <rect x="144" y="21" width="55" height="17" rx="8" fill="var(--mint2)"/>
+ <circle cx="137" cy="57" r="6" fill="var(--mint2)"/><path d="m134 57 2 2 4-5" fill="none" stroke="var(--green)" stroke-width="1.6" stroke-linecap="round"/>
+ <rect x="149" y="54" width="56" height="6" rx="3" fill="var(--blue)"/>
+ <circle cx="137" cy="76" r="6" fill="var(--mint2)"/><path d="m134 76 2 2 4-5" fill="none" stroke="var(--green)" stroke-width="1.6" stroke-linecap="round"/>
+ <rect x="149" y="73" width="44" height="6" rx="3" fill="var(--blue)"/>
+ <circle cx="137" cy="95" r="6" fill="var(--sun)"/><rect x="134" y="94" width="6" height="2" rx="1" fill="var(--gold)"/>
+ <rect x="149" y="92" width="51" height="6" rx="3" fill="var(--gray)"/>
+</g>
+<g transform="rotate(8 256 81)">
+ <rect x="221" y="41" width="84" height="80" rx="16" fill="var(--blue)" stroke="var(--paper)" stroke-width="3"/>
+<svg x="246" y="54" width="35" height="35" viewBox="0 -960 960 960" fill="var(--inkblue)"><path d="m438-452-56-56q-12-12-28-12t-28 12q-12 12-12 28.5t12 28.5l84 85q12 12 28 12t28-12l170-170q12-12 12-28.5T636-593q-12-12-28.5-12T579-593L438-452Zm42 368q-7 0-13-1t-12-3q-135-45-215-166.5T160-516v-189q0-25 14.5-45t37.5-29l240-90q14-5 28-5t28 5l240 90q23 9 37.5 29t14.5 45v189q0 140-80 261.5T505-88q-6 2-12 3t-13 1Zm0-80q104-33 172-132t68-220v-189l-240-90-240 90v189q0 121 68 220t172 132Zm0-316Z"/></svg>
+ <rect x="235" y="100" width="56" height="6" rx="3" fill="var(--blue2)"/>
+</g>
+
+</svg>

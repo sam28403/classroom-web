@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 286" role="img" aria-labelledby="art-title">
+  <title id="art-title">课表、人脸签到与考勤记录</title>
+  <!-- Material Symbols Rounded paths by Google, licensed under Apache 2.0. Colors and composition adapted for Sam-Lab Classroom. -->
+  <style>
+    :root { --cloud:#e7f1ff; --ribbon:#dbe8fc; --ring:#b9d3f5; --blue:#3072bd; --blueInk:#124b82; --paper:#f9fcff; --border:#bed4ef; --teal:#dcf6ed; --tealInk:#25735c; --amber:#f8ecd9; --amberInk:#93632b; --ghost:#ecf3fd; }
+    @media (prefers-color-scheme: dark) {
+      :root { --cloud:#233247; --ribbon:#213955; --ring:#3d638b; --blue:#9dc8fe; --blueInk:#b5d5fd; --paper:#253144; --border:#54708d; --teal:#21443c; --tealInk:#8cdbc6; --amber:#4c3a28; --amberInk:#f3d0a2; --ghost:#334560; }
+    }
+  </style>
+  <path fill="var(--cloud)" d="M58 143c9-59 59-111 128-116 52-4 74 18 112 17 39-1 78-30 124-13 45 17 54 64 42 107-18 64-62 104-135 119-66 13-99-11-148-6-43 5-90 4-114-24-24-29-14-56-9-84z"/>
+  <path fill="var(--ribbon)" d="M340 34c54 18 87 67 88 106 1 48-35 92-86 112 78-7 126-63 132-124 5-50-34-111-92-112-14 0-29 6-42 18z"/>
+  <path fill="none" stroke="var(--ring)" stroke-width="2" stroke-dasharray="4 9" stroke-linecap="round" d="M87 236C57 220 42 181 60 135c16-41 68-69 109-66m187 171c56-18 88-71 84-113"/>
+  <circle cx="95" cy="61" r="10" fill="var(--teal)"/>
+  <circle cx="65" cy="198" r="6" fill="var(--ring)"/>
+  <path fill="var(--amber)" d="M422 56c-6 14-11 18-26 20 15 2 20 6 26 20 5-14 10-18 25-20-15-2-20-6-25-20z"/>
+  <g transform="rotate(-9 180 132)">
+    <rect x="100" y="65" width="175" height="148" rx="22" fill="var(--ribbon)" transform="translate(3 7)"/>
+    <rect x="100" y="65" width="175" height="148" rx="22" fill="var(--paper)" stroke="var(--border)" stroke-width="2"/>
+    <path fill="var(--ribbon)" d="M122 65h131a22 22 0 0 1 22 22v17H100V87a22 22 0 0 1 22-22z"/>
+    <path d="M129 60v15m117-15v15" stroke="var(--blue)" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="128" cy="123" r="4" fill="var(--blue)" opacity=".48"/><circle cx="151" cy="123" r="4" fill="var(--blue)" opacity=".35"/><circle cx="174" cy="123" r="4" fill="var(--blue)" opacity=".28"/><circle cx="197" cy="123" r="4" fill="var(--blue)" opacity=".35"/><circle cx="220" cy="123" r="4" fill="var(--blue)" opacity=".28"/><circle cx="243" cy="123" r="4" fill="var(--blue)" opacity=".35"/>
+    <rect x="121" y="140" width="29" height="21" rx="5" fill="var(--ghost)"/><rect x="158" y="140" width="29" height="21" rx="5" fill="var(--teal)"/><rect x="195" y="140" width="29" height="21" rx="5" fill="var(--ghost)"/><rect x="232" y="140" width="22" height="21" rx="5" fill="var(--ghost)"/>
+    <rect x="121" y="169" width="29" height="20" rx="5" fill="var(--ghost)"/><rect x="158" y="169" width="29" height="20" rx="5" fill="var(--ghost)"/><rect x="195" y="169" width="29" height="20" rx="5" fill="var(--amber)"/><rect x="232" y="169" width="22" height="20" rx="5" fill="var(--ghost)"/>
+  </g>
+  <circle cx="114" cy="166" r="26" fill="var(--teal)" stroke="var(--paper)" stroke-width="4"/>
+  <svg x="100" y="152" width="28" height="28" viewBox="0 -960 960 960" fill="var(--tealInk)"><path d="m438-342 139-139q12-12 29-12t29 12q12 12 12 29t-12 29L466-254q-12 12-28 12t-28-12l-85-85q-12-12-12-29t12-29q12-12 29-12t29 12l55 55ZM200-80q-33 0-56.5-23.5T120-160v-560q0-33 23.5-56.5T200-800h40v-40q0-17 11.5-28.5T280-880q17 0 28.5 11.5T320-840v40h320v-40q0-17 11.5-28.5T680-880q17 0 28.5 11.5T720-840v40h40q33 0 56.5 23.5T840-720v560q0 33-23.5 56.5T760-80H200Zm0-80h560v-400H200v400Zm0-480h560v-80H200v80Zm0 0v-80 80Z"/></svg>
+  <g transform="rotate(10 327 144)">
+    <rect x="272" y="51" width="108" height="192" rx="22" fill="var(--ring)" transform="translate(5 6)"/>
+    <rect x="272" y="51" width="108" height="192" rx="22" fill="var(--blueInk)"/>
+    <rect x="278" y="57" width="96" height="180" rx="17" fill="var(--paper)"/>
+    <rect x="310" y="65" width="32" height="4" rx="2" fill="var(--blue)" opacity=".52"/>
+    <rect x="288" y="86" width="76" height="90" rx="17" fill="var(--ribbon)"/>
+    <path d="M297 112v-10a7 7 0 0 1 7-7h10m24 0h10a7 7 0 0 1 7 7v10m0 37v10a7 7 0 0 1-7 7h-10m-24 0h-10a7 7 0 0 1-7-7v-10" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round"/>
+    <svg x="308" y="113" width="36" height="36" viewBox="0 -960 960 960" fill="var(--blueInk)"><path d="M360-390q-21 0-35.5-14.5T310-440q0-21 14.5-35.5T360-490q21 0 35.5 14.5T410-440q0 21-14.5 35.5T360-390Zm240 0q-21 0-35.5-14.5T550-440q0-21 14.5-35.5T600-490q21 0 35.5 14.5T650-440q0 21-14.5 35.5T600-390ZM480-160q134 0 227-93t93-227q0-24-3-46.5T786-570q-21 5-42 7.5t-44 2.5q-91 0-172-39T390-708q-32 78-91.5 135.5T160-486v6q0 134 93 227t227 93Zm0 80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm-54-715q42 70 114 112.5T700-640q14 0 27-1.5t27-3.5q-42-70-114-112.5T480-800q-14 0-27 1.5t-27 3.5ZM177-581q51-29 89-75t57-103q-51 29-89 75t-57 103Zm249-214Zm-103 36Z"/></svg>
+    <rect x="293" y="189" width="66" height="12" rx="6" fill="var(--teal)"/>
+    <rect x="307" y="219" width="38" height="3" rx="1.5" fill="var(--blue)" opacity=".4"/>
+  </g>
+  <g transform="rotate(-7 387 206)">
+    <rect x="364" y="179" width="61" height="57" rx="18" fill="var(--amber)" stroke="var(--paper)" stroke-width="4"/>
+    <svg x="380" y="193" width="29" height="29" viewBox="0 -960 960 960" fill="var(--amberInk)"><path d="M160-120q-33 0-56.5-23.5T80-200v-560q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v560q0 33-23.5 56.5T800-120H160Zm0-80h640v-560H160v560Zm200-80q17 0 28.5-11.5T400-320q0-17-11.5-28.5T360-360H240q-17 0-28.5 11.5T200-320q0 17 11.5 28.5T240-280h120Zm222-193-29-29q-12-12-28-11.5T497-501q-11 12-11.5 28t11.5 28l57 57q12 12 28 12t28-12l142-142q12-12 12-28t-12-28q-12-12-28.5-12T695-586L582-473Zm-222 33q17 0 28.5-11.5T400-480q0-17-11.5-28.5T360-520H240q-17 0-28.5 11.5T200-480q0 17 11.5 28.5T240-440h120Zm0-160q17 0 28.5-11.5T400-640q0-17-11.5-28.5T360-680H240q-17 0-28.5 11.5T200-640q0 17 11.5 28.5T240-600h120ZM160-200v-560 560Z"/></svg>
+  </g>
+</svg>
