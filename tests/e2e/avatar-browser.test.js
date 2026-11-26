@@ -100,6 +100,13 @@ async function review(page, user, decision) {
   const photo = page.getByAltText('申请头像')
   await expect(photo).toBeVisible()
   await expect.poll(() => photo.evaluate(img => img.naturalWidth)).toBe(512)
+  await expect(photo).toHaveCSS('object-fit', 'contain')
+  await expect.poll(() => photo.evaluate(img => {
+    const image = img.getBoundingClientRect()
+    const frame = img.closest('.el-image').getBoundingClientRect()
+    return image.left >= frame.left && image.right <= frame.right
+      && image.top >= frame.top && image.bottom <= frame.bottom
+  }), { message: '审核照片应完整显示在预览框内' }).toBe(true)
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: '申请详情' })).not.toBeVisible()
   await row.getByRole('button', { name: decision, exact: true }).click()

@@ -186,7 +186,7 @@ test('face consent, upload validation, registration and duplicate concurrency', 
   assert.equal((await outsider.request('/attendance/me')).items.length, 0)
   await other.request(`/attendance-tasks/${taskId}/records`, 'GET', undefined, 403)
 })
-test('exceptions, outages, review trail, manual alternative, finalization and CSV', async () => {
+test('exceptions, outages, review trail, manual alternative, finalization and exports', async () => {
   await teacher.request(`/attendance-tasks/${taskId}/end`, 'POST', {})
   for (const [mode, code] of [['multiple', 'MULTIPLE_FACES'], ['none', 'NO_FACE'], ['low', 'LOW_SIMILARITY']]) {
     faceMode = mode
@@ -207,10 +207,39 @@ test('exceptions, outages, review trail, manual alternative, finalization and CS
   await teacher.request(`/attendance-tasks/${task.id}/end`, 'POST', {})
   faceMode = 'match'
   const ending = await teacher.request('/attendance-tasks', 'POST', taskBody(), 201)
+  const reportPath = `/attendance-tasks/${ending.id}/report.html`
+  assert.equal((await teacher.request(reportPath, 'GET', undefined, 409)).code, 'ATTENDANCE_NOT_ENDED')
+  await admin.request(reportPath, 'GET', undefined, 409)
+  await admin.request(`/attendance-tasks/${ending.id}/records`, 'GET', undefined, 409)
+  assert.ok(!(await admin.request('/attendance-tasks')).items.some(row => row.id === ending.id))
   await teacher.request(`/attendance-tasks/${ending.id}/end`, 'POST', {})
   await teacher.request(`/attendance-tasks/${ending.id}/end`, 'POST', {})
   await learner.request(`/attendance-tasks/${ending.id}/check-in`, 'POST', photo(), 409)
   assert.equal((await teacher.request(`/attendance-tasks/${ending.id}/records`)).items[0].status, 'absent')
+  await other.request(reportPath, 'GET', undefined, 403)
+  await learner.request(reportPath, 'GET', undefined, 403)
+  await client().request(reportPath, 'GET', undefined, 401)
+  await admin.request(`/attendance-tasks/${ending.id}/end`, 'POST', {}, 403)
+  assert.ok((await admin.request('/attendance-tasks')).items.some(row => row.id === ending.id))
+  assert.equal((await admin.request(`/attendance-tasks/${ending.id}/records`)).counts.absent, 1)
+  const previousName = (await db.get('SELECT name FROM students WHERE id=?', [studentId])).name
+  await db.run('UPDATE students SET name=? WHERE id=?', ['<样例 & 学生>', studentId])
+  try {
+    const response = await fetch(base + reportPath, { headers: { Cookie: teacher.cookie } })
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type'), /^text\/html/)
+    assert.match(response.headers.get('content-disposition'), new RegExp(`attachment.*attendance-${ending.id}\\.html`))
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    const html = await response.text()
+    assert.equal(await admin.request(reportPath), html)
+    assert.match(html, /&lt;样例 &amp; 学生&gt;/)
+    assert.doesNotMatch(html, /<样例 & 学生>/)
+    assert.match(html, /<td>缺勤<\/td><td>系统归档<\/td>/)
+    assert.doesNotMatch(html, /<td>正常<\/td>/) // Reports must exclude the same student's records from earlier tasks.
+  } finally {
+    await db.run('UPDATE students SET name=? WHERE id=?', [previousName, studentId])
+  }
+  assert.ok((await admin.request('/audit-logs')).items.some(r => r.action === 'report.export' && r.resource_type === 'attendance_tasks' && r.resource_id === String(ending.id)))
   const csv = await teacher.request(`/reports/teaching-classes/${classId}?format=csv`)
   assert.match(csv, /student1/)
   assert.ok((await teacher.request(`/reports/teaching-classes/${classId}`)).counts.manual >= 1)
