@@ -66,9 +66,24 @@ async function assertArchived(classroom) {
 test('admin archive closes active and paused tasks and preserves history', async () => {
   const classroom = await fixture()
   const other = await fixture()
+  const secondUserId = await createUser('archive_missing', 'Password123', 'student')
+  const second = await db.get('SELECT id FROM students WHERE user_id=?', [secondUserId])
+  await teacher.request(`/teaching-classes/${classroom.id}/enrollments`, 'POST', { student_id: second.id }, 201)
   await teacher.request(`/teaching-classes/${classroom.id}`, 'DELETE', undefined, 403)
   await admin.request(`/teaching-classes/${classroom.id}`, 'DELETE')
   await admin.request(`/teaching-classes/${classroom.id}`, 'DELETE')
+  await assertArchived(classroom)
+  const [stopped, paused, legacy] = classroom.tasks
+  const tasks = (await admin.request('/attendance-tasks')).items.filter(t => t.teaching_class_id === classroom.id)
+  assert.deepEqual(tasks.map(t => t.end_reason), [null, 'archived', 'archived'])
+  for (const account of [teacher, admin]) {
+    for (const id of [stopped, paused]) {
+      assert.equal((await account.request(`/attendance-tasks/${id}/report.html`, 'GET', undefined, 409)).code, 'ATTENDANCE_ARCHIVED')
+    }
+    assert.equal((await account.request(`/attendance-tasks/${legacy}/report.html`, 'GET', undefined, 409)).code, 'ATTENDANCE_END_UNKNOWN')
+  }
+  await teacher.request(`/attendance-tasks/${stopped}/end`, 'POST', {})
+  assert.equal((await db.get('SELECT end_reason FROM attendance_tasks WHERE id=?', [stopped])).end_reason, 'archived')
   await assertArchived(classroom)
   const unaffected = await db.get('SELECT status FROM attendance_tasks WHERE id=?', [other.tasks[0]])
   assert.equal(unaffected.status, 'active')

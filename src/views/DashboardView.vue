@@ -25,7 +25,7 @@ const launch = ref(false), launchClass = ref(null), duration = ref(15), lateMinu
 const clock = ref(Date.now()), timer = setInterval(() => { clock.value = Date.now() }, 30000)
 onUnmounted(() => { clearInterval(timer); clearInterval(attendanceTimer); version++ })
 const role = computed(() => user.value?.role)
-const menus = computed(() => [{ id: '', label: '控制面板', symbol: '▦' }, ...(role.value === 'admin' ? [{ id: 'users', label: '用户管理', symbol: '♙' }] : []), { id: 'courses', label: role.value === 'admin' ? '课程管理' : '课程列表', symbol: '▤' }, ...(role.value !== 'admin' ? [{ id: 'attendance', label: '考勤记录', symbol: '◷' }] : []), { id: 'requests', label: role.value === 'admin' ? '申请审核' : '我的申请', symbol: '✓' }, { id: 'settings', label: '设置', symbol: '⚙' }])
+const menus = computed(() => [{ id: '', label: '控制面板', symbol: '▦' }, ...(role.value === 'admin' ? [{ id: 'users', label: '用户管理', symbol: '♙' }] : []), { id: 'courses', label: role.value === 'admin' ? '课程管理' : '课程列表', symbol: '▤' }, { id: 'attendance', label: '考勤记录', symbol: '◷' }, { id: 'requests', label: role.value === 'admin' ? '申请审核' : '我的申请', symbol: '✓' }, { id: 'settings', label: '设置', symbol: '⚙' }])
 const section = computed(() => String(route.params.section || ''))
 const pageTitle = computed(() => menus.value.find((m) => m.id === section.value)?.label)
 const navigate = (id = '') => router.push('/dashboard' + (id ? `/${id}` : ''))
@@ -161,7 +161,7 @@ async function createTask() {
           </div>
           <el-empty v-if="!shownClasses.length" :description="search ? '没有匹配的课程' : '暂无课程，添加课程或联系教师加入教学班'" />
         </template>
-        <AttendancePanel v-if="section === 'attendance' && role !== 'admin'" :role="role" :classes="classes" :tasks="tasks" :records="records" @refresh="refresh" />
+        <AttendancePanel v-if="section === 'attendance' && role" :key="user.id" :role="role" :tasks="tasks" :records="records" @refresh="refresh" />
         <RequestPanel
           v-if="section === 'requests'" :admin="role === 'admin'"
           :requests="role === 'admin' ? requests : null" @changed="refresh"

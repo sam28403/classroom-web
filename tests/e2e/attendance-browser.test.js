@@ -1,12 +1,12 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { chromium, expect } from '@playwright/test'
 import { base, db, client, createUser } from '../helpers/account-api.js'
 
 let browser
 after(async () => { await browser?.close() })
-test('teacher launches attendance, sees full roster, refreshes, searches and finalizes', { timeout: 60000 }, async () => {
+test('teacher manages attendance and downloads reports, and admin downloads finalized HTML', { timeout: 60000 }, async () => {
   await createUser('browser_att_teacher', 'Password123', 'teacher')
   await createUser('browser_att_student1', 'Password123', 'student')
   await createUser('browser_att_student2', 'Password123', 'student')
@@ -44,6 +44,7 @@ test('teacher launches attendance, sees full roster, refreshes, searches and fin
   assert.equal(notices.filter(item => item.message.startsWith('已有课程通知')).length, 3)
   await studentContext.close()
   await page.goto(origin + '/#/dashboard/attendance')
+  await expect(page.getByRole('button', { name: '导出 HTML', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '记录 / 复核', exact: true }).click()
   await expect(page.getByRole('cell', { name: '未签到', exact: true })).toHaveCount(2)
   await expect(page.getByText(/未签到不代表最终缺勤/)).toHaveCount(0)
@@ -72,6 +73,82 @@ test('teacher launches attendance, sees full roster, refreshes, searches and fin
   await page.getByRole('button', { name: '记录 / 复核', exact: true }).click()
   await expect(page.getByRole('cell', { name: '缺勤', exact: true })).toHaveCount(1)
   await expect(page.getByRole('cell', { name: '未签到', exact: true })).toHaveCount(0)
+  await page.getByRole('dialog', { name: '考勤记录与复核' }).locator('.el-dialog__headerbtn').click()
+  async function downloadReport(attendancePage) {
+    const [download] = await Promise.all([
+      attendancePage.waitForEvent('download'),
+      attendancePage.getByRole('button', { name: '导出 HTML', exact: true }).click(),
+    ])
+    assert.equal(download.suggestedFilename(), `attendance-${task.id}.html`)
+    return readFile(await download.path(), 'utf8')
+  }
+  const teacherReport = await downloadReport(page)
+  const adminContext = await browser.newContext()
+  await adminContext.addCookies([{ name: 'connect.sid', value: admin.cookie.slice('connect.sid='.length), url: origin }])
+  const adminPage = await adminContext.newPage()
+  const adminTasksPath = '**/api/attendance-tasks'
+  let attendanceRequests = 0
+  await adminPage.route(adminTasksPath, async route => {
+    attendanceRequests++
+    await route.fulfill({ status: 503, json: { message: '考勤暂时不可用' } })
+  })
+  await adminPage.goto(origin + '/#/dashboard/users')
+  await expect(adminPage.getByRole('cell', { name: 'browser_att_student1', exact: true }).first()).toBeVisible()
+  assert.equal(attendanceRequests, 0)
+  await adminPage.getByRole('menuitem', { name: '考勤记录' }).click()
+  await expect(adminPage.getByRole('heading', { name: '已结束考勤' })).toBeVisible()
+  await expect(adminPage.getByText('加载考勤失败：考勤暂时不可用')).toBeVisible()
+  assert.equal(attendanceRequests, 1)
+  await adminPage.getByRole('menuitem', { name: '用户管理' }).click()
+  await expect(adminPage.getByRole('cell', { name: 'browser_att_student1', exact: true }).first()).toBeVisible()
+  await adminPage.getByRole('menuitem', { name: '考勤记录' }).click()
+  await expect(adminPage.getByText('加载考勤失败：考勤暂时不可用')).toBeVisible()
+  await adminPage.unroute(adminTasksPath)
+  await adminPage.getByRole('button', { name: '刷新考勤' }).click()
+  assert.equal(await downloadReport(adminPage), teacherReport)
+  await adminPage.getByRole('button', { name: '查看记录' }).click()
+  await expect(adminPage.getByRole('cell', { name: '缺勤', exact: true })).toHaveCount(1)
+  await expect(adminPage.getByRole('button', { name: '人工登记 / 请假' })).toHaveCount(0)
+  const reportPage = await adminContext.newPage()
+  await reportPage.setContent(teacherReport)
+  await expect(reportPage.getByRole('heading', { name: '学生考勤报告' })).toBeVisible()
+  await expect(reportPage.getByRole('row').filter({ hasText: 'browser_att_student1' }).getByRole('cell', { name: '正常' })).toBeVisible()
+  await expect(reportPage.getByRole('row').filter({ hasText: 'browser_att_student2' }).getByRole('cell', { name: '缺勤' })).toBeVisible()
+  await expect(adminPage.getByRole('button', { name: '导出本班考勤 CSV' })).toHaveCount(0)
+  const secondTask = await teacher.request('/attendance-tasks', 'POST', {
+    teaching_class_id: cls.id, start_at: new Date(Date.now() - 1000).toISOString(),
+    late_at: new Date(Date.now() + 300000).toISOString(), end_at: new Date(Date.now() + 600000).toISOString(),
+  }, 201)
+  await teacher.request(`/attendance-tasks/${secondTask.id}/manual`, 'POST', {
+    student_id: students[0].id, status: 'late', reason: '验证 CSV 记录覆盖多次任务',
+  }, 201)
+  await page.getByRole('button', { name: '记录 / 复核', exact: true }).click()
+  const csvPath = `**/api/reports/teaching-classes/${cls.id}?format=csv`
+  let releaseFailure
+  const gate = new Promise(resolve => { releaseFailure = resolve })
+  await page.route(csvPath, async route => {
+    await gate
+    await route.fulfill({ status: 503, json: { message: '暂时无法下载' } })
+  }, { times: 1 })
+  const csvButton = page.getByRole('button', { name: '导出本班考勤 CSV', exact: true })
+  await csvButton.click()
+  try {
+    await expect(page.getByRole('button', { name: '正在导出 CSV', exact: true })).toBeDisabled()
+  } finally { releaseFailure() }
+  await expect(page.getByText('导出 CSV 失败：暂时无法下载')).toBeVisible()
+  await expect(csvButton).toBeEnabled()
+  const [csvDownload] = await Promise.all([page.waitForEvent('download'), csvButton.click()])
+  assert.equal(csvDownload.suggestedFilename(), `attendance-${cls.id}.csv`)
+  const csv = await readFile(await csvDownload.path(), 'utf8')
+  assert.ok(csv.includes(`"${task.id}","browser_att_student1","browser_att_student1","present"`))
+  assert.ok(csv.includes(`"${secondTask.id}","browser_att_student1","browser_att_student1","late"`))
+  await admin.request(`/teaching-classes/${cls.id}`, 'DELETE')
+  await adminPage.getByRole('dialog', { name: '考勤记录', exact: true }).locator('.el-dialog__headerbtn').click()
+  await adminPage.getByRole('button', { name: '刷新考勤' }).click()
+  const archivedRow = adminPage.getByRole('row').filter({ hasText: '归档中止' })
+  await expect(archivedRow).toBeVisible()
+  await expect(archivedRow.getByRole('button', { name: '导出 HTML' })).toHaveCount(0)
+  await expect(adminPage.getByRole('row').filter({ hasText: '已结束' }).getByRole('button', { name: '导出 HTML' })).toBeVisible()
   if (errors.length) throw new Error(errors.join('\n'))
   await browser.close()
 })

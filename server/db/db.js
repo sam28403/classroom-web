@@ -102,4 +102,9 @@ const enrollmentColumns = mysql ? await db.all('SHOW COLUMNS FROM enrollments') 
 if (!enrollmentColumns.some(column => (column.name || column.Field) === 'revision')) {
   await db.run('ALTER TABLE enrollments ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
 }
+const attendanceColumns = mysql ? await db.all('SHOW COLUMNS FROM attendance_tasks') : await db.all('PRAGMA table_info(attendance_tasks)')
+if (!attendanceColumns.some(column => (column.name || column.Field) === 'end_reason')) {
+  // Older tasks used the same status for normal completion and cancellation.
+  await db.run('ALTER TABLE attendance_tasks ADD COLUMN end_reason VARCHAR(16)')
+}
 export default db
