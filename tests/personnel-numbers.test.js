@@ -35,14 +35,14 @@ test('number registry upgrades historical duplicates and arbitrates concurrent c
     assert.equal((await db.get("SELECT password_hash FROM users WHERE username='legacy_student'")).password_hash, 'preserved-hash')
     await assert.rejects(createUser('duplicate_legacy', 'Password123', 'student', 'active', {
       number: 'LEGACY-001',
-    }), { code: 'SQLITE_CONSTRAINT_PRIMARYKEY' })
+    }), { status: 409, code: 'PERSONNEL_NUMBER_IN_USE' })
     assert.equal(await db.get("SELECT id FROM users WHERE username='duplicate_legacy'"), undefined)
 
     const results = await Promise.allSettled(['student', 'teacher'].map(role =>
       createUser(`concurrent_${role}`, 'Password123', role, 'active', { number: 'SHARED-NEW' }),
     ))
     assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
-    assert.equal(results.filter(result => result.status === 'rejected').length, 1)
+    assert.equal(results.find(result => result.status === 'rejected')?.reason.code, 'PERSONNEL_NUMBER_IN_USE')
     assert.equal((await db.get("SELECT COUNT(*) AS total FROM users WHERE username LIKE 'concurrent_%'")).total, 1)
 
     await assert.rejects(createUser('legacy_student', 'Password123', 'student', 'active', {

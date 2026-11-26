@@ -11,7 +11,7 @@ Web 使用 `credentials: 'include'`；Android 使用持久 CookieJar。认证采
 | 方法 | 路径 | 请求或用途 |
 |---|---|---|
 | GET | `/captcha` | 返回 `{image}`（SVG data URL），验证码 5 分钟有效，一次性使用，与 Cookie 绑定 |
-| POST | `/auth/register` | `{username,password,role,code,name,student_no?/teacher_no?}`；role 为 student/teacher；教师为 pending；新注册、重复账号与重复学号 / 工号统一返回 202 和相同受理话术，requiresApproval 仅取决于提交的角色，不表示已创建账号 |
+| POST | `/auth/register` | `{username,password,role,code,name,student_no?/teacher_no?}`。教师为 pending。学号或工号已被任一角色占用时返回 `409 PERSONNEL_NUMBER_IN_USE`。新注册及仅用户名重复时返回 202。requiresApproval 仅取决于提交的角色 |
 | POST | `/auth/login` | `{username,password,code,client_type?:web}`，返回 `{success,user}`；新登录替换旧 Web 会话，此入口不接受 Android 类型；待处理密码重置返回 403 / PASSWORD_RESET_PENDING |
 | GET | `/auth/me` | 当前用户的 id、username、role、avatar |
 | POST | `/android/auth/login` | `{username,password,code,client_type?:android}`，返回 `{success,user}` 及会话 Cookie；复用 `/captcha`，新登录仅替换旧 Android 会话；账号限制、验证码及限流与 Web 一致 |

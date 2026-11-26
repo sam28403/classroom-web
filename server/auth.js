@@ -14,6 +14,8 @@ import { revokeUserSessions } from './session-policy.js'
 export { revokeUserSessions }
 export const cookieOptions = { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production' }
 const publicUser = ({ id, username, role, avatar }) => ({ id, username, role, avatar })
+const isDuplicateKey = error =>
+  ['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'ER_DUP_ENTRY'].includes(error.code)
 export function validatePassword(password, min = 8) {
   if (typeof password !== 'string' || password.length < min || Buffer.byteLength(password) > 72 || !/\d/.test(password) || !/[^0-9]/.test(password)) {
     fail(400, `密码须至少 ${min} 位，最多 72 字节，并包含数字和非数字字符`)
@@ -23,7 +25,14 @@ export async function createUser(username, password, role, status = 'active', pr
   const hash = await bcrypt.hash(password, 12)
   return db.transaction(async () => {
     if (['student', 'teacher'].includes(role)) {
-      await reservePersonnelNumber(db, profile.number || username)
+      try {
+        await reservePersonnelNumber(db, profile.number || username)
+      } catch (error) {
+        if (isDuplicateKey(error)) {
+          fail(409, '该学号或工号已被使用，请核对后重试或联系管理员', 'PERSONNEL_NUMBER_IN_USE')
+        }
+        throw error
+      }
     }
     const result = db.legacyPassword
       ? await db.run('INSERT INTO users(username,password,password_hash,role,status) VALUES (?,?,?,?,?)', [username, hash, hash, role, status])
@@ -122,7 +131,7 @@ auth.post([
         name: string(req.body.name, '姓名', 80),
       })
     } catch (error) {
-      if (['SQLITE_CONSTRAINT_UNIQUE', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'ER_DUP_ENTRY'].includes(error.code)) {
+      if (isDuplicateKey(error)) {
         return res.status(202).json(response)
       }
       throw error

@@ -8,18 +8,33 @@ import { submitRequest } from '../server/requests.js'
 const admin = client()
 await admin.login('admin', process.env.ADMIN_PASSWORD)
 
-test('public registration rejects numbers used by either role with the same accepted response', async () => {
+test('public registration rejects reused numbers and accepts matching names with different numbers', async () => {
   const person = client()
   for (const role of ['student', 'teacher']) {
     const number = `SHARED-${role}`
-    const original = await person.register(`original_${role}`, role, number)
-    const duplicate = await person.register(`duplicate_${role}`, role, number)
-    assert.deepEqual(duplicate, original)
+    const register = async (username, registrationRole, registrationNumber, expectedStatus) =>
+      person.request('/auth/register', 'POST', {
+        username, role: registrationRole, name: '温', password: 'Password123',
+        [registrationRole === 'student' ? 'student_no' : 'teacher_no']: registrationNumber,
+        code: await person.captcha(),
+      }, expectedStatus)
+    await register(`original_${role}`, role, number, 202)
+    const duplicate = await register(`duplicate_${role}`, role, number, 409)
+    assert.equal(duplicate.success, false)
+    assert.equal(duplicate.code, 'PERSONNEL_NUMBER_IN_USE')
     const otherRole = role === 'student' ? 'teacher' : 'student'
-    const crossRole = await person.register(`cross_${role}`, otherRole, number)
-    assert.equal(crossRole.message, original.message)
-    assert.equal(crossRole.requiresApproval, otherRole === 'teacher')
-    assert.equal(await db.get('SELECT id FROM users WHERE username=?', [`cross_${role}`]), undefined)
+    const crossRole = await register(`cross_${role}`, otherRole, number, 409)
+    assert.equal(crossRole.code, 'PERSONNEL_NUMBER_IN_USE')
+    for (const username of [`duplicate_${role}`, `cross_${role}`]) {
+      assert.equal(await db.get('SELECT id FROM users WHERE username=?', [username]), undefined)
+    }
+    const sameName = `same_name_${role}`
+    await register(sameName, role, `${number}-2`, 202)
+    const account = await db.get('SELECT status FROM users WHERE username=?', [sameName])
+    assert.equal(account.status, role === 'teacher' ? 'pending' : 'active')
+    const requests = (await admin.request('/requests')).items.filter(row => row.kind === 'teacher_registration')
+    assert.ok(requests.every(row => ![`duplicate_${role}`, `cross_${role}`].includes(row.username)))
+    assert.equal(requests.find(row => row.username === sameName)?.status, role === 'teacher' ? 'pending' : undefined)
   }
 })
 
@@ -73,7 +88,12 @@ test('historical cross-role duplicates are flagged and only conflicted numbers c
   assert.equal((await admin.request('/students')).items.find(p => p.id === student.id).number_conflict, 0)
   assert.equal((await admin.request('/teachers')).items.find(p => p.id === teacher.id).number_conflict, 0)
   await admin.request(`/teachers/${teacher.id}`, 'PATCH', { teacher_no: 'CHANGE-AGAIN' }, 400)
-  await client().register('reuse_corrected', 'student', 'CORRECTED-T001')
+  const applicant = client()
+  const rejected = await applicant.request('/auth/register', 'POST', {
+    username: 'reuse_corrected', role: 'student', student_no: 'CORRECTED-T001',
+    name: '重复编号测试', password: 'Password123', code: await applicant.captcha(),
+  }, 409)
+  assert.equal(rejected.code, 'PERSONNEL_NUMBER_IN_USE')
   assert.equal(await db.get("SELECT id FROM users WHERE username='reuse_corrected'"), undefined)
 })
 
