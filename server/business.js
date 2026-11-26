@@ -148,7 +148,8 @@ business.post('/attendance-tasks/:id/end', teacher, async (req, res) => {
   await taskForTeacher(req, req.params.id)
   await mutation(req, 'end', 'attendance_tasks', async () => {
     const task = await db.get('SELECT * FROM attendance_tasks WHERE id=?' + db.lock, [id(req.params.id)])
-    await db.run("UPDATE attendance_tasks SET status='ended' WHERE id=?", [task.id])
+    if (task.status === 'ended') return
+    await db.run("UPDATE attendance_tasks SET status='ended',end_reason='completed' WHERE id=?", [task.id])
     // Only finalization creates absences. Face failures remain exceptions for review.
     await db.run(`INSERT INTO attendance_records(task_id,student_id,status,source,checked_at)
       SELECT ?,e.student_id,'absent','system',? FROM enrollments e WHERE e.teaching_class_id=? AND e.status='active'
@@ -201,6 +202,10 @@ business.get('/attendance-tasks/:id/records', attendanceReader, async (req, res)
 business.get('/attendance-tasks/:id/report.html', attendanceReader, async (req, res) => {
   const task = await taskForTeacher(req, req.params.id)
   requireEnded(task)
+  if (task.end_reason !== 'completed') {
+    if (task.end_reason === 'archived') fail(409, '该考勤因教学班归档中止，无法导出正式 HTML 报告', 'ATTENDANCE_ARCHIVED')
+    fail(409, '历史任务的结束原因未知，无法导出正式 HTML 报告', 'ATTENDANCE_END_UNKNOWN')
+  }
   const classroom = await db.get(`SELECT c.name AS class_name,k.course_name FROM teaching_classes c
     JOIN courses k ON k.id=c.course_id WHERE c.id=?`, [task.teaching_class_id])
   const items = await attendanceRows(task.id)

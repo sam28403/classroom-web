@@ -90,7 +90,7 @@ schedule 字段为 `{date,start,end,location,repeat,interval?,weekdays?,until?}`
 | POST | `/attendance-tasks/{id}/check-in` | 安卓学生会话：multipart 现场图片；以审核通过头像为识别基准；先校验身份、选课、时段和重复记录，再调用识别；落库前再检查 |
 | GET | `/attendance/me` | 学生本人记录 |
 | GET | `/attendance-tasks/{id}/records` | 对应教师；管理员仅可查看已结束任务。列表含 total、counts，进行中未签到项为 unrecorded |
-| GET | `/attendance-tasks/{id}/report.html` | 对应教师或管理员。下载该次已结束考勤的 HTML 报告，未结束返回 409 ATTENDANCE_NOT_ENDED |
+| GET | `/attendance-tasks/{id}/report.html` | 对应教师或管理员。仅允许导出教师正常结束并结算的任务。未结束、因归档中止、历史结束原因未知均返回 409，分别为 ATTENDANCE_NOT_ENDED、ATTENDANCE_ARCHIVED、ATTENDANCE_END_UNKNOWN |
 | POST | `/attendance-tasks/{id}/manual` | 对应教师：`{student_id,status?,reason}`，非人脸替代流程，status 默认 manual；已有记录则使用 review |
 | PATCH | `/attendance-records/{id}/review` | 对应教师：`{status,reason}`，事务写入修改前后状态、操作者和原因，再更新结果 |
 | GET | `/attendance-records/{id}/reviews` | 对应教师：完整复核轨迹 |

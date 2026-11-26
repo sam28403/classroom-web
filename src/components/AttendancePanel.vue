@@ -10,6 +10,8 @@ const manual = ref(false), members = ref([]), student = ref(null), status = ref(
 const reviewRow = ref(null)
 const manualTask = ref(null), refreshing = ref(false), exporting = ref(null)
 const exportingCsv = ref(false)
+const adminTasks = ref([]), adminLoading = ref(false), adminError = ref('')
+const visibleTasks = computed(() => props.role === 'admin' ? adminTasks.value : props.tasks)
 const search = ref(''), filter = ref(''), updatedAt = ref(null)
 const filteredRows = computed(() => rows.value.filter(row => (!filter.value || row.status === filter.value || (filter.value === 'present' && row.status === 'manual'))
   && `${row.name} ${row.student_no}`.includes(search.value.trim())))
@@ -18,13 +20,33 @@ const summary = computed(() => {
   return [['应到', rows.value.length], ['已签到', count(['present', 'late', 'manual'])], ['未签到', count(['unrecorded'])], ['迟到', count(['late'])], ['待复核', count(['exception'])], ['缺勤', count(['absent'])], ['请假', count(['leave'])]]
 })
 const live = computed(() => {
-  const task = props.tasks.find(t => t.id === selected.value?.id) || selected.value
+  const task = visibleTasks.value.find(t => t.id === selected.value?.id) || selected.value
   return task && task.status !== 'ended'
 })
 let timer, version = 0, manualVersion = 0, disposed = false
-onMounted(() => { timer = setInterval(() => {
-  if (!document.hidden && selected.value && live.value && !busy.value && !refreshing.value && !manual.value) view(selected.value, true)
-}, 5000) })
+function taskStatus(task) {
+  if (task.status === 'ended') {
+    if (task.end_reason === 'archived') return '归档中止'
+    return task.end_reason === 'completed' ? '已结束' : '结束原因未知'
+  }
+  if (task.status !== 'active') return statusNames[task.status]
+  return Date.parse(task.end_at) <= Date.now() ? '已过期，待结束' : '开放中'
+}
+async function loadAdminTasks() {
+  if (adminLoading.value) return
+  adminLoading.value = true
+  adminError.value = ''
+  try { adminTasks.value = (await api('/attendance-tasks')).items }
+  catch (e) { adminError.value = e.message }
+  finally { adminLoading.value = false }
+}
+onMounted(() => {
+  if (props.role === 'admin') { loadAdminTasks(); return }
+  if (props.role !== 'teacher') return
+  timer = setInterval(() => {
+    if (!document.hidden && selected.value && live.value && !busy.value && !refreshing.value && !manual.value) view(selected.value, true)
+  }, 5000)
+})
 onUnmounted(() => { disposed = true; version++; manualVersion++; clearInterval(timer) })
 async function view(task, quiet = false) {
   if (!task) return
@@ -72,7 +94,7 @@ async function exportClassCsv() {
 async function end(task) {
   try { await ElMessageBox.confirm('未签到学生将被记为缺勤；已记录的异常仍需人工复核。结束后无法重新开启。', '结束考勤', { type: 'warning' }) } catch { return }
   busy.value = true
-  try { await api(`/attendance-tasks/${task.id}/end`, { method: 'POST', body: '{}' }); ElMessage.success('考勤已结束'); emit('refresh'); if (selected.value?.id === task.id) await view({ ...task, status: 'ended' }) } catch (e) { ElMessage.error(e.message) } finally { busy.value = false }
+  try { await api(`/attendance-tasks/${task.id}/end`, { method: 'POST', body: '{}' }); ElMessage.success('考勤已结束'); emit('refresh'); if (selected.value?.id === task.id) await view({ ...task, status: 'ended', end_reason: 'completed' }) } catch (e) { ElMessage.error(e.message) } finally { busy.value = false }
 }
 async function openManual(row = null, studentId = null) {
   const task = selected.value
@@ -106,20 +128,24 @@ async function save() {
 <template>
   <el-card shadow="never">
     <template #header><h2>{{ role === 'student' ? '个人考勤记录' : role === 'admin' ? '已结束考勤' : '考勤任务' }}</h2></template>
-    <el-table v-if="role !== 'student'" :data="tasks" :empty-text="role === 'admin' ? '暂无已结束考勤' : '尚未发起考勤'">
+    <div v-if="role === 'admin'" class="admin-attendance-actions">
+      <el-button :loading="adminLoading" @click="loadAdminTasks">刷新考勤</el-button>
+      <el-alert v-if="adminError" :title="`加载考勤失败：${adminError}`" type="error" :closable="false" show-icon />
+    </div>
+    <el-table v-if="role !== 'student'" v-loading="adminLoading" :data="visibleTasks" :empty-text="role === 'admin' ? '暂无已结束考勤' : '尚未发起考勤'">
       <el-table-column prop="course_name" label="课程" min-width="140" />
       <el-table-column prop="class_name" label="教学班" min-width="120" />
       <el-table-column label="开始时间" min-width="160">
         <template #default="{ row }">{{ dateKey(row.start_at) }} {{ formatTime(row.start_at) }}</template>
       </el-table-column>
       <el-table-column label="状态" min-width="130">
-        <template #default="{ row }">{{ row.status === 'active' && Date.parse(row.end_at) <= Date.now() ? '已过期，待结束' : row.status === 'active' ? '开放中' : statusNames[row.status] }}</template>
+        <template #default="{ row }">{{ taskStatus(row) }}</template>
       </el-table-column>
       <el-table-column label="操作" min-width="190">
         <template #default="{ row }">
           <el-button link type="primary" @click="view(row)">{{ role === 'teacher' ? '记录 / 复核' : '查看记录' }}</el-button>
-          <el-button v-if="row.status === 'ended'" link type="primary" :disabled="exporting !== null" :loading="exporting === row.id" @click="exportReport(row)">导出 HTML</el-button>
-          <el-button v-else-if="role === 'teacher'" link type="danger" :disabled="busy" @click="end(row)">结束</el-button>
+          <el-button v-if="row.status === 'ended' && row.end_reason === 'completed'" link type="primary" :disabled="exporting !== null" :loading="exporting === row.id" @click="exportReport(row)">导出 HTML</el-button>
+          <el-button v-else-if="role === 'teacher' && row.status !== 'ended'" link type="danger" :disabled="busy" @click="end(row)">结束</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -141,7 +167,7 @@ async function save() {
       </div>
     </div>
     <template v-if="selected">
-      <p class="note">{{ live ? '名单每 5 秒自动刷新。' : '考勤已结束。' }} {{ updatedAt ? `最近更新：${updatedAt}` : '' }}</p>
+      <p class="note">{{ live ? '名单每 5 秒自动刷新。' : `${taskStatus(selected)}。` }} {{ updatedAt ? `最近更新：${updatedAt}` : '' }}</p>
       <div class="attendance-summary"><span v-for="[label, count] in summary" :key="label">{{ label }} <strong>{{ count }}</strong></span></div>
       <div class="record-filters"><el-input v-model="search" placeholder="搜索姓名或学号" clearable aria-label="搜索学生" /><el-select v-model="filter" placeholder="全部状态" clearable aria-label="筛选签到状态"><el-option v-for="state in ['unrecorded','present','late','exception','absent','leave']" :key="state" :value="state" :label="statusNames[state]" /></el-select></div>
     </template>
@@ -153,6 +179,7 @@ async function save() {
   </el-card>
 </template>
 <style scoped>.attendance-summary,.record-filters { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }.attendance-summary span { padding: 12px; background: var(--el-fill-color-light); border-radius: 6px; }.record-filters .el-input { width: 240px; }.record-filters .el-select { width: 160px; }h2 { margin: 0; font-size: 18px; }.record-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 24px; }h3 { font-size: 16px; }.note { color: var(--el-text-color-secondary); line-height: 1.7; font-size: 13px; }
+.admin-attendance-actions { display: grid; justify-items: start; gap: 8px; margin-bottom: 12px; }
 .record-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .record-actions .el-button { margin: 0; }
 </style>
